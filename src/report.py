@@ -5,7 +5,7 @@ import pandas as pd
 from typing import Dict, List
 from datetime import datetime
 import logging
-from utils import create_markdown_table
+from .utils import create_markdown_table
 
 logger = logging.getLogger(__name__)
 

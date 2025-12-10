@@ -13,19 +13,19 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 
-from fpl_api import FPLAPIClient
-from database import DatabaseManager
-from api_football_client import APIFootballClient
-from visualization_dashboard import VisualizationDashboard
-from live_tracker import LiveGameweekTracker
-from optimizer import TransferOptimizer
-from projections import ProjectionEngine
-from eo import EOCalculator
+from .fpl_api import FPLAPIClient
+from .database import DatabaseManager
+from .api_football_client import APIFootballClient
+from .visualization_dashboard import VisualizationDashboard
+from .live_tracker import LiveGameweekTracker
+from .optimizer import TransferOptimizer
+from .projections import ProjectionEngine
+from .eo import EOCalculator
 import pandas as pd
 
 # ML Engine imports
 try:
-    from ml_engine import MLEngine
+    from .ml_engine import MLEngine
     ML_ENGINE_AVAILABLE = True
 except ImportError:
     MLEngine = None
@@ -33,7 +33,7 @@ except ImportError:
 
 # Learning system import
 try:
-    from main import apply_learning_system
+    from .main import apply_learning_system
 except ImportError:
     def apply_learning_system(*args, **kwargs):
         return kwargs.get('recommendations', []) if 'recommendations' in kwargs else []

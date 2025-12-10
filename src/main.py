@@ -36,13 +36,13 @@ try:
     INGESTOR_AVAILABLE = True
 except ImportError: HistoricalDataIngestor = None
 
-from fpl_api import FPLAPIClient
-from projections import ProjectionEngine
-from eo import EOCalculator
-from optimizer import TransferOptimizer
-from chips import ChipEvaluator
-from report import ReportGenerator
-from utils import validate_squad_constraints, create_markdown_table
+from .fpl_api import FPLAPIClient
+from .projections import ProjectionEngine
+from .eo import EOCalculator
+from .optimizer import TransferOptimizer
+from .chips import ChipEvaluator
+from .report import ReportGenerator
+from .utils import validate_squad_constraints, create_markdown_table
 
 try:
     from dotenv import load_dotenv

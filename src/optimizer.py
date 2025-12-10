@@ -6,7 +6,7 @@ import pandas as pd
 import pulp
 from typing import Dict, List, Tuple, Optional
 import logging
-from utils import price_from_api
+from .utils import price_from_api
 
 logger = logging.getLogger(__name__)
 

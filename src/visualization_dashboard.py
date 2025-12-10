@@ -9,10 +9,10 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
 
-from fpl_api import FPLAPIClient
-from database import DatabaseManager
-from api_football_client import APIFootballClient
-from dashboard_helpers import sample_high_ranked_teams, aggregate_template_team
+from .fpl_api import FPLAPIClient
+from .database import DatabaseManager
+from .api_football_client import APIFootballClient
+from .dashboard_helpers import sample_high_ranked_teams, aggregate_template_team
 
 logger = logging.getLogger(__name__)
 

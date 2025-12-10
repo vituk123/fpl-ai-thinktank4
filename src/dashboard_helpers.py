@@ -9,7 +9,7 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from fpl_api import FPLAPIClient
+from .fpl_api import FPLAPIClient
 
 logger = logging.getLogger(__name__)
 
