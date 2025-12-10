@@ -305,13 +305,25 @@ async def get_entry_info(
         # Extract team name (from entry name)
         team_name = entry_info.get('name', 'Unknown Team')
         
+        # Return full entry info for frontend compatibility
         return StandardResponse(
             data={
+                "id": entry_id,
                 "entry_id": entry_id,
                 "manager_name": manager_name,
                 "team_name": team_name,
+                "name": team_name,  # Alias for compatibility
                 "player_first_name": manager_first_name,
                 "player_last_name": manager_last_name,
+                "player_region_name": entry_info.get('player_region_name', ''),
+                "player_region_iso_code_short": entry_info.get('player_region_iso_code_short', ''),
+                "player_region_iso_code_long": entry_info.get('player_region_iso_code_long', ''),
+                "summary_overall_points": entry_info.get('summary_overall_points', 0),
+                "summary_overall_rank": entry_info.get('summary_overall_rank', 0),
+                "summary_event_points": entry_info.get('summary_event_points', 0),
+                "summary_event_rank": entry_info.get('summary_event_rank', 0),
+                "current_event": entry_info.get('current_event', 1),
+                "kit": entry_info.get('kit'),
             },
             meta={
                 "valid": True,
