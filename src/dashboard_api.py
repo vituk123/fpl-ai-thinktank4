@@ -3,7 +3,7 @@ Dashboard API Server
 FastAPI REST endpoints for visualization dashboard data.
 """
 import logging
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Union
 from fastapi import FastAPI, HTTPException, Query, Path as PathParam, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -197,7 +197,7 @@ class ErrorResponse(BaseModel):
 
 class StandardResponse(BaseModel):
     """Standard API response format"""
-    data: dict
+    data: Union[dict, list]  # Can be dict or list
     meta: Optional[dict] = None
     errors: Optional[list] = None
 
@@ -333,6 +333,72 @@ async def get_entry_info(
     except Exception as e:
         logger.error(f"Error fetching entry info: {e}")
         raise HTTPException(status_code=404, detail=f"Entry ID {entry_id} not found or invalid")
+
+
+# ==================== MINI-LEAGUE ENDPOINTS ====================
+@app.get("/api/v1/entry/{entry_id}/leagues")
+async def get_user_leagues(
+    entry_id: int = PathParam(..., description="FPL entry ID")
+):
+    """
+    Get list of mini-leagues the manager is in.
+    """
+    if not api_client:
+        raise HTTPException(status_code=503, detail="FPL API client not available")
+    
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        # Initialize tracker and get leagues
+        tracker = LiveGameweekTracker(api_client, entry_id)
+        leagues = await loop.run_in_executor(None, tracker.get_user_leagues)
+        
+        return StandardResponse(
+            data=leagues,
+            meta={
+                "entry_id": entry_id,
+                "total_leagues": len(leagues) if leagues else 0
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error fetching user leagues: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leagues: {str(e)}")
+
+
+@app.get("/api/v1/entry/{entry_id}/league/{league_id}/standings")
+async def get_league_standings(
+    entry_id: int = PathParam(..., description="FPL entry ID"),
+    league_id: int = PathParam(..., description="Mini-league ID")
+):
+    """
+    Get standings table for a specific mini-league.
+    """
+    if not api_client:
+        raise HTTPException(status_code=503, detail="FPL API client not available")
+    
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        # Initialize tracker and get league standings
+        tracker = LiveGameweekTracker(api_client, entry_id)
+        table, league_name = await loop.run_in_executor(None, tracker.get_mini_league_table, league_id)
+        
+        return StandardResponse(
+            data={
+                "league_id": league_id,
+                "league_name": league_name,
+                "standings": table
+            },
+            meta={
+                "entry_id": entry_id,
+                "total_teams": len(table) if table else 0
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error fetching league standings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch league standings: {str(e)}")
 
 
 # ==================== UTILITY ENDPOINTS ====================
