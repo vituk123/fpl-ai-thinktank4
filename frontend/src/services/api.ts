@@ -126,7 +126,7 @@ export const dashboardApi = {
   },
   getLeagues: async (entryId: number) => {
     try {
-      const response = await renderClient.get(`/entry/${entryId}/leagues`);
+      const response = await renderClient.get(`/api/v1/entry/${entryId}/leagues`);
       // Handle StandardResponse format
       if (response.data?.data) {
         return Array.isArray(response.data.data) ? response.data.data : [];
@@ -143,7 +143,7 @@ export const dashboardApi = {
   },
   getLeagueStandings: async (entryId: number, leagueId: number) => {
     try {
-      const response = await renderClient.get(`/entry/${entryId}/league/${leagueId}/standings`);
+      const response = await renderClient.get(`/api/v1/entry/${entryId}/league/${leagueId}/standings`);
       // Handle StandardResponse format
       if (response.data?.data) {
         return response.data.data;
