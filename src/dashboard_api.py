@@ -587,38 +587,40 @@ async def get_current_gameweek():
         
         if not events:
             return StandardResponse(
-                data={"gameweek": 1, "is_current": False, "is_finished": False, "is_next": False},
+                data={"gameweek": 1, "is_current": False, "is_finished": False, "is_next": False, "deadline_time": None},
                 meta={"event_name": ""}
             )
         
-        # Priority 1: Find current gameweek (is_current = True)
+        # Priority 1: Find next gameweek (is_next = True)
+        next_event = next((e for e in events if e.get('is_next', False)), None)
+        
+        # Priority 2: Find current gameweek (is_current = True)
         current_event = next((e for e in events if e.get('is_current', False)), None)
         
-        # Priority 2: If no current, find latest finished gameweek (most recent completed)
+        # Priority 3: If no current, find latest finished gameweek (most recent completed)
         if not current_event:
             finished_events = [e for e in events if e.get('finished', False)]
             if finished_events:
                 current_event = max(finished_events, key=lambda x: x.get('id', 0))
         
-        # Priority 3: If still none, find next gameweek
-        if not current_event:
-            current_event = next((e for e in events if e.get('is_next', False)), None)
-        
         # Priority 4: Final fallback: latest event by ID (highest gameweek number)
         if not current_event and events:
             current_event = max(events, key=lambda x: x.get('id', 0))
         
-        gameweek = current_event.get('id', 1) if current_event else 1
+        # Use next_event if available, otherwise current_event
+        event = next_event or current_event
+        gameweek = event.get('id', 1) if event else 1
         
         return StandardResponse(
             data={
                 "gameweek": gameweek,
-                "is_current": current_event.get('is_current', False) if current_event else False,
-                "is_finished": current_event.get('finished', False) if current_event else False,
-                "is_next": current_event.get('is_next', False) if current_event else False,
+                "is_current": event.get('is_current', False) if event else False,
+                "is_finished": event.get('finished', False) if event else False,
+                "is_next": event.get('is_next', False) if event else False,
+                "deadline_time": event.get('deadline_time') if event else None,
             },
             meta={
-                "event_name": current_event.get('name', '') if current_event else ''
+                "event_name": event.get('name', '') if event else ''
             }
         )
     except Exception as e:
