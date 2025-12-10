@@ -81,13 +81,12 @@ def setup_cors(app: FastAPI, config: dict):
         if edge_function_url not in cors_origins:
             cors_origins.append(edge_function_url)
     
-    # If "*" is in the list and it's the only item, allow all
+    # If "*" is in the list, allow all origins (for development)
     # Otherwise, use the specific origins
-    if cors_origins == ["*"] or (len(cors_origins) == 1 and cors_origins[0] == "*"):
+    if "*" in cors_origins:
         allow_origins = ["*"]
     else:
-        # Remove "*" if present with other origins
-        allow_origins = [origin for origin in cors_origins if origin != "*"]
+        allow_origins = cors_origins
         if not allow_origins:
             allow_origins = ["*"]
     
@@ -685,7 +684,8 @@ async def get_transfer_recommendations(
         
         bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
         
-        # Get bootstrap data and build players DataFrame
+        # Load all players with projections
+        # Get bootstrap data and build players DataFrame (must be done before building current_squad)
         players_df = pd.DataFrame(bootstrap['elements'])
         teams_df = pd.DataFrame(bootstrap['teams'])
         team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}

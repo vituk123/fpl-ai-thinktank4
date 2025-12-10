@@ -78,7 +78,9 @@ dashboard:
   high_rank_range: [1, 10000]
   cors_origins:
     - "http://localhost:3000"  # React dev server
+    - "http://127.0.0.1:3000"  # React dev server (IPv4)
     - "http://localhost:5173"  # Vite dev server
+    - "http://127.0.0.1:5173"  # Vite dev server (IPv4)
     - "*"  # Allow all in development (change in production)
     # Add production frontend URL here when deploying
   enable_auth: false  # Prepare for future authentication
