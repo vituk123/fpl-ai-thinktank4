@@ -685,6 +685,12 @@ async def get_transfer_recommendations(
         
         bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
         
+        # Get bootstrap data and build players DataFrame
+        players_df = pd.DataFrame(bootstrap['elements'])
+        teams_df = pd.DataFrame(bootstrap['teams'])
+        team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
+        players_df['team_name'] = players_df['team'].map(team_map)
+        
         # Build current squad DataFrame
         current_squad = []
         for pick in picks_data['picks']:
@@ -700,13 +706,6 @@ async def get_transfer_recommendations(
         # Get bank value
         entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
         bank = entry_history.get('current', [{}])[-1].get('bank', 0) / 10.0  # Convert to millions
-        
-        # Load all players with projections
-        # Get bootstrap data and build players DataFrame
-        players_df = pd.DataFrame(bootstrap['elements'])
-        teams_df = pd.DataFrame(bootstrap['teams'])
-        team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
-        players_df['team_name'] = players_df['team'].map(team_map)
         
         # Generate projections
         projection_engine = ProjectionEngine(config)
