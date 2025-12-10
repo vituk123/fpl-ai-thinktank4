@@ -1,0 +1,92 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Cache
+.cache/
+*.cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+output/*.md
+!output/.gitkeep
+
+# Environment files (keep templates)
+.env
+.env.local
+.env.production
+.env.development
+!*.env.template
+!*.env.example
+
+# Deployment artifacts
+*.log
+
+
+# Exclude cloned/downloaded content
+clone1/
+clone2/
+=*
+*.csv
+*.json
+*.pkl
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Cache directories
+.cache/
+*.cache
+src/.cache/
+
+# Model files (too large)
+*.pkl
+models/*.pkl
+src/models/*.pkl

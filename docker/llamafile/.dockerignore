@@ -1,0 +1,8 @@
+models/*
+!models/.gitkeep
+*.gguf
+*.gguf.*
+.DS_Store
+*.log
+*.tmp
+

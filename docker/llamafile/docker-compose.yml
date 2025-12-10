@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  llamafile:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fpl-llamafile-server
+    ports:
+      - "11434:8080"  # Map container port 8080 to host port 11434 (Ollama-compatible port)
+    volumes:
+      - ./models:/model:ro  # Mount models directory (read-only)
+      - ./models:/models:ro  # Alternative mount point
+    environment:
+      - LLAMA_HOST=0.0.0.0
+      - LLAMA_PORT=8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - fpl-network
+
+networks:
+  fpl-network:
+    driver: bridge
+

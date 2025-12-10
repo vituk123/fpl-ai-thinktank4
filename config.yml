@@ -1,0 +1,111 @@
+# FPL Optimizer Configuration
+
+# Default entry ID (can be overridden via CLI)
+default_entry_id: 2568103
+
+# Transfer settings
+max_transfers: 4
+points_hit_per_transfer: -4
+
+# EO (Effective Ownership) strategy
+risk_tolerance: 0.6  # R parameter for differential strategy (0-1)
+eo_weight: 0.1  # Weight for EO adjustment in EV formula
+
+# Projection model weights
+projection:
+  official_weight: 0.6  # Weight for official FPL ep_next
+  regression_weight: 0.4  # Weight for custom regression model
+  
+  # Regression coefficients
+  regression_coefficients:
+    xg_per90: 5.0  # Points per expected goal per 90
+    xa_per90: 3.0  # Points per expected assist per 90
+    form: 0.3      # Form multiplier
+    minutes_factor: 0.1  # Bonus for high minutes
+  
+  # Availability adjustments
+  doubtful_multiplier: 0.3  # Multiply projection by this if status='d'
+  injured_multiplier: 0.0   # Multiply projection by this if status='i'
+
+# Chip evaluation thresholds
+chips:
+  min_ev_delta: 10.0  # Minimum EV gain to trigger chip (Bench Boost, Triple Captain)
+  min_ev_delta_freehit: 10.0  # Minimum EV gain to trigger Free Hit chip
+  min_confidence: 0.65  # Minimum confidence to trigger chip
+  min_ev_delta_no_confidence: 12.0  # EV threshold if confidence unavailable
+
+# Optimizer settings
+optimizer:
+  method: "greedy"  # Options: greedy, mip
+  top_n_candidates: 15  # Top N players to consider per position
+  max_combinations: 10000  # Max combinations to evaluate
+  
+# Confidence calculation
+confidence:
+  n_simulations: 100  # Monte Carlo simulations for confidence
+  random_seed: 42  # For reproducibility
+
+# API settings
+api:
+  base_url: "https://fantasy.premierleague.com/api"
+  cache_enabled: true
+  cache_ttl_seconds: 3600  # 1 hour
+  request_timeout: 30
+  retry_attempts: 3
+  retry_delay: 2
+
+# API-Football settings (https://www.api-football.com/documentation-v3)
+api_football:
+  api_key: "08b18b2d60e1cfea7769c7276226d2d1"
+  enabled: true
+  cache_ttl_seconds: 3600  # 1 hour
+  premier_league_id: 39  # Premier League ID in API-Football
+  requests_per_minute: 10  # Rate limit: 10 requests per minute
+  requests_per_day: 100  # Rate limit: 100 requests per day
+
+# Output settings
+output:
+  format: "markdown"
+  include_charts: false
+  verbose: true
+
+# Dashboard settings
+dashboard:
+  api_port: 8000
+  cache_enabled: true
+  cache_ttl_seconds: 300  # 5 minutes for dashboard data
+  template_team_sample_size: 100
+  high_rank_range: [1, 10000]
+  cors_origins:
+    - "http://localhost:3000"  # React dev server
+    - "http://localhost:5173"  # Vite dev server
+    - "*"  # Allow all in development (change in production)
+    # Add production frontend URL here when deploying
+  enable_auth: false  # Prepare for future authentication
+  rate_limit_per_minute: 60
+
+# Image settings
+images:
+  supabase_bucket: "fpl-images"
+  download_dir: ".cache/images"
+  optimize_images: true
+  max_image_size_kb: 500
+  player_mapping_file: "player_id_mapping.json"
+  season: 2024
+
+# NewsData.io settings (replaces Twitter scraper)
+# Documentation: https://newsdata.io/documentation
+news:
+  api_key: "pub_a13e0ce062804c5891decaa7ac8a27b9"
+  enabled: true
+  cache_ttl_seconds: 3600  # 1 hour
+  days_back: 7  # Number of days to look back for news
+  max_results: 200  # Maximum number of articles to fetch
+
+# Supabase Edge Function settings (uses built-in AI API)
+# Documentation: https://supabase.com/docs/guides/functions/ai-models
+supabase_edge_function:
+  function_name: "summarize-news"  # Name of the Edge Function
+  model: "mistral"  # Ollama model name (must be pulled via: ollama pull mistral)
+  timeout: 60  # Timeout in seconds
+

@@ -1,0 +1,21 @@
+/* Mac Menu Bar Styles */
+
+.mac-bar {
+  font-family: 'Roboto', sans-serif;
+}
+
+.mac-bar__item {
+  font-size: 0.9rem;
+  color: #1D1D1B;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mac-bar__item:hover {
+  background-color: rgba(29, 29, 27, 0.1);
+}
+
+.mac-bar__item_strong {
+  font-weight: 700;
+}
+
