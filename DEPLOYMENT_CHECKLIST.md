@@ -4,7 +4,7 @@ Follow these steps in order to deploy your FPL backend.
 
 ## Prerequisites ✓
 
-- [ ] GitHub repository created and code pushed
+- [x] GitHub repository created and code pushed
 - [ ] Supabase account created at https://supabase.com
 - [ ] Render account created at https://render.com
 - [ ] Supabase CLI installed (`brew install supabase/tap/supabase` or `npm install -g supabase`)
