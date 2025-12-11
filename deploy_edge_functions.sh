@@ -38,6 +38,9 @@ supabase functions deploy optimize-team --no-verify-jwt
 echo "  → Deploying ml-players function..."
 supabase functions deploy ml-players --no-verify-jwt
 
+echo "  → Deploying ml-report function..."
+supabase functions deploy ml-report --no-verify-jwt
+
 # Set secrets if RENDER_API_URL is provided
 if [ -n "$RENDER_API_URL" ]; then
     echo "  → Setting RENDER_API_URL secret..."
@@ -55,6 +58,7 @@ echo "  - Live Gameweek: https://YOUR_PROJECT.supabase.co/functions/v1/live-game
 echo "  - ML Predictions: https://YOUR_PROJECT.supabase.co/functions/v1/ml-predictions"
 echo "  - ML Recommendations: https://YOUR_PROJECT.supabase.co/functions/v1/ml-recommendations"
 echo "  - ML Players: https://YOUR_PROJECT.supabase.co/functions/v1/ml-players"
+echo "  - ML Report: https://YOUR_PROJECT.supabase.co/functions/v1/ml-report"
 echo "  - Optimize Team: https://YOUR_PROJECT.supabase.co/functions/v1/optimize-team"
 echo ""
 echo "💡 Test locally first:"
@@ -62,5 +66,6 @@ echo "  supabase functions serve live-gameweek"
 echo "  supabase functions serve ml-predictions"
 echo "  supabase functions serve ml-recommendations"
 echo "  supabase functions serve ml-players"
+echo "  supabase functions serve ml-report"
 echo "  supabase functions serve optimize-team"
 

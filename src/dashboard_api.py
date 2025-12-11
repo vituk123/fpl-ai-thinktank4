@@ -1081,6 +1081,153 @@ async def get_ml_enhanced_players(
         logger.error(f"Error generating ML-enhanced players: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate ML-enhanced players: {str(e)}")
 
+@app.get("/api/v1/ml/report")
+async def get_ml_report(
+    entry_id: int = Query(..., description="FPL entry ID (required)"),
+    gameweek: Optional[int] = Query(None, description="Target gameweek (default: current)"),
+    model_version: str = Query("v4.6", description="ML model version")
+):
+    """Get complete ML report data (same as main.py output) for a specific team"""
+    if not api_client or not db_manager:
+        raise HTTPException(status_code=503, detail="API client or database not available")
+    
+    try:
+        import asyncio
+        from .chips import ChipEvaluator
+        from .report import ReportGenerator
+        loop = asyncio.get_event_loop()
+        
+        # Get current gameweek if not specified
+        if gameweek is None:
+            bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
+            gameweek = api_client.get_current_gameweek()
+        
+        # Load all players with bootstrap data
+        bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
+        players_df = pd.DataFrame(bootstrap['elements'])
+        teams_df = pd.DataFrame(bootstrap['teams'])
+        team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
+        players_df['team_name'] = players_df['team'].map(team_map)
+        players_df['position'] = players_df['element_type']
+        
+        # Get user's entry info and history
+        entry_info = await loop.run_in_executor(None, api_client.get_entry_info, entry_id, True)
+        entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
+        
+        # Get current squad (like main.py)
+        optimizer = TransferOptimizer(config)
+        current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
+        current_squad_ids = set(current_squad['id'].tolist()) if not current_squad.empty else set()
+        current_squad_teams = set(current_squad['team'].dropna().unique()) if not current_squad.empty else set()
+        
+        # Get fixtures
+        all_fixtures = await loop.run_in_executor(None, api_client.get_fixtures, True)
+        fixtures_for_gw = [f for f in all_fixtures if f.get('event') == gameweek]
+        
+        # Identify top transfer targets (top 200) to limit processing (like main.py)
+        top_players = players_df.nlargest(200, ['now_cost', 'total_points'], keep='all')
+        relevant_team_ids = current_squad_teams | set(top_players['team'].dropna().unique())
+        relevant_player_ids = current_squad_ids | set(top_players['id'].head(100).tolist())
+        
+        # Add fixture difficulty (optimized for relevant teams, like main.py)
+        try:
+            from .main import add_fixture_difficulty
+            players_df = await loop.run_in_executor(
+                None, 
+                lambda: add_fixture_difficulty(players_df, api_client, gameweek, db_manager, relevant_team_ids, all_fixtures=all_fixtures, bootstrap_data=bootstrap)
+            )
+        except Exception as e:
+            logger.warning(f"Could not add fixture difficulty: {e}")
+        
+        # Add statistical analysis (optimized for relevant players, like main.py)
+        try:
+            from .main import add_statistical_analysis
+            history_df = None
+            if db_manager:
+                history_df = db_manager.get_current_season_history()
+            players_df = await loop.run_in_executor(
+                None,
+                lambda: add_statistical_analysis(players_df, api_client, gameweek, db_manager, relevant_player_ids, fixtures=fixtures_for_gw, bootstrap_data=bootstrap, history_df=history_df)
+            )
+        except Exception as e:
+            logger.warning(f"Could not add statistical analysis: {e}")
+        
+        # Generate projections
+        projection_engine = ProjectionEngine(config)
+        players_df = await loop.run_in_executor(None, projection_engine.calculate_projections, players_df)
+        
+        # Apply ML predictions (same as main.py)
+        if ML_ENGINE_AVAILABLE:
+            from .main import train_and_predict_ml
+            players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+        else:
+            if 'EV' not in players_df.columns:
+                players_df['EV'] = players_df.get('ep_next', 0)
+        
+        # Apply EO adjustment (like main.py)
+        try:
+            eo_calc = EOCalculator(config)
+            players_df = eo_calc.apply_eo_adjustment(players_df, entry_info.get('summary_overall_rank', 100000))
+        except Exception as e:
+            logger.warning(f"Could not apply EO adjustment: {e}")
+        
+        # Get bank value
+        bank = entry_history.get('current', [{}])[-1].get('bank', 0) / 10.0
+        
+        # Generate transfer recommendations (like main.py)
+        current_squad_ids_set = set(current_squad['id'])
+        available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
+        
+        # Calculate free transfers
+        free_transfers = 1
+        try:
+            current_event = next((e for e in entry_history.get('current', []) if e.get('event') == gameweek - 1), None)
+            if current_event:
+                free_transfers = current_event.get('event_transfers', 0) + 1
+                free_transfers = min(free_transfers, 2)
+        except:
+            pass
+        
+        smart_recs = optimizer.generate_smart_recommendations(
+            current_squad, available_players, bank, free_transfers, max_transfers=4
+        )
+        
+        # Apply learning system if available
+        if ML_ENGINE_AVAILABLE and MLEngine:
+            ml_engine_instance = MLEngine(db_manager, model_version=model_version)
+            if ml_engine_instance.load_model():
+                ml_engine_instance.is_trained = True
+                smart_recs['recommendations'] = apply_learning_system(
+                    db_manager, api_client, entry_id, gameweek,
+                    smart_recs['recommendations'], ml_engine_instance
+                )
+        
+        # Evaluate chips (like main.py)
+        chip_eval = ChipEvaluator(config)
+        chips_used = [c['name'] for c in entry_history.get('chips', [])]
+        avail_chips = [c for c in ['bboost', '3xc', 'freehit', 'wildcard'] if c not in chips_used]
+        chip_evals = chip_eval.evaluate_all_chips(
+            current_squad, players_df, gameweek, avail_chips, bank, smart_recs['recommendations']
+        )
+        
+        # Generate report data (JSON format)
+        report_generator = ReportGenerator(config)
+        report_data = report_generator.generate_report_data(
+            entry_info, gameweek, current_squad, smart_recs['recommendations'],
+            chip_evals, players_df, fixtures_for_gw, team_map
+        )
+        
+        return StandardResponse(
+            data=report_data,
+            meta={
+                "model_version": model_version,
+                "generated_at": datetime.now().isoformat()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating ML report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate ML report: {str(e)}")
+
 
 # ==================== OPTIMIZE TEAM ENDPOINT ====================
 @app.get("/api/v1/optimize/team")

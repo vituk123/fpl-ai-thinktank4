@@ -437,4 +437,152 @@ class ReportGenerator:
             f.write(full_report)
         
         logger.info(f"Report successfully generated at {output_path}")
+    
+    def generate_report_data(self, entry_info: Dict, gameweek: int, current_squad: pd.DataFrame, recommendations: List[Dict], chip_evaluation: Dict, players_df: pd.DataFrame, fixtures: List[Dict] = None, team_map: Dict = None) -> Dict:
+        """
+        Generate report data as JSON structure (same as generate_report but returns dict instead of markdown).
+        """
+        from datetime import datetime
+        from .utils import price_from_api
+        
+        # Header
+        header = {
+            "manager": f"{entry_info.get('player_first_name', '')} {entry_info.get('player_last_name', '')}".strip(),
+            "team": entry_info.get('name', 'Unknown'),
+            "gameweek": gameweek,
+            "generated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        # Current Squad Analysis
+        current_squad_list = []
+        if not current_squad.empty:
+            squad_df = current_squad[['web_name', 'team_name', 'element_type', 'now_cost', 'EV']].copy()
+            squad_df = squad_df.sort_values(by='EV', ascending=False)
+            for _, row in squad_df.iterrows():
+                current_squad_list.append({
+                    "player": row['web_name'],
+                    "team": row['team_name'],
+                    "pos": int(row['element_type']),
+                    "price": float(row['now_cost'] / 10.0),
+                    "xp": float(row['EV'])
+                })
+        
+        # Fixture Insights
+        fixture_insights = {
+            "best_fixture_runs": [],
+            "dgw_alerts": [],
+            "bgw_alerts": []
+        }
+        
+        if not players_df.empty and 'fdr_3gw' in players_df.columns:
+            best_3gw = players_df.nsmallest(5, 'fdr_3gw')[['web_name', 'team_name', 'fdr_3gw']]
+            for _, row in best_3gw.iterrows():
+                fixture_insights["best_fixture_runs"].append({
+                    "player": row['web_name'],
+                    "team": row['team_name'],
+                    "avg_fdr": float(row['fdr_3gw'])
+                })
+        
+        if 'dgw_probability' in players_df.columns:
+            dgw_teams = players_df[players_df['dgw_probability'] > 0.5].groupby('team_name')['dgw_probability'].first()
+            for team, prob in dgw_teams.items():
+                fixture_insights["dgw_alerts"].append({
+                    "team": team,
+                    "probability": float(prob)
+                })
+        
+        if 'bgw_probability' in players_df.columns:
+            bgw_teams = players_df[players_df['bgw_probability'] > 0.5]['team_name'].unique()
+            fixture_insights["bgw_alerts"] = [{"team": team} for team in bgw_teams]
+        
+        # Transfer Recommendations
+        transfer_recommendations = {
+            "top_suggestion": None
+        }
+        
+        if recommendations and len(recommendations) > 0:
+            rec = recommendations[0]
+            out_players = [{"name": p['name'], "team": p.get('team', 'Unknown')} for p in rec.get('players_out', [])]
+            in_players = [{"name": p['name'], "team": p.get('team', 'Unknown')} for p in rec.get('players_in', [])]
+            
+            transfer_recommendations["top_suggestion"] = {
+                "num_transfers": rec.get('num_transfers', 0),
+                "net_ev_gain": float(rec.get('net_ev_gain', 0)),
+                "players_out": out_players,
+                "players_in": in_players
+            }
+        
+        # Updated Squad After Transfers
+        updated_squad = {
+            "starting_xi": [],
+            "bench": []
+        }
+        
+        if recommendations and len(recommendations) > 0 and fixtures and team_map:
+            updated_squad_df = self._apply_transfers_to_squad(current_squad, recommendations[0], players_df)
+            starting_xi_df = self._build_starting_xi(updated_squad_df)
+            starting_xi_ids = set(starting_xi_df['id'])
+            bench_df = updated_squad_df[~updated_squad_df['id'].isin(starting_xi_ids)]
+            
+            # Starting XI
+            if not starting_xi_df.empty:
+                starting_xi_df['price'] = starting_xi_df['now_cost'].apply(price_from_api)
+                starting_xi_df['opponent'] = starting_xi_df.apply(
+                    lambda row: self._get_fixture_info(row, fixtures, team_map), axis=1
+                )
+                starting_xi_df = starting_xi_df.sort_values('EV', ascending=False)
+                
+                for _, row in starting_xi_df.iterrows():
+                    updated_squad["starting_xi"].append({
+                        "player": row['web_name'],
+                        "team": row['team_name'],
+                        "pos": int(row['element_type']),
+                        "price": float(row['price']),
+                        "xp": float(row['EV']),
+                        "fixture": row.get('opponent', 'No fixture')
+                    })
+            
+            # Bench
+            if not bench_df.empty:
+                bench_df['price'] = bench_df['now_cost'].apply(price_from_api)
+                bench_df['opponent'] = bench_df.apply(
+                    lambda row: self._get_fixture_info(row, fixtures, team_map), axis=1
+                )
+                bench_df = bench_df.sort_values('EV', ascending=False)
+                
+                for _, row in bench_df.iterrows():
+                    updated_squad["bench"].append({
+                        "player": row['web_name'],
+                        "team": row['team_name'],
+                        "pos": int(row['element_type']),
+                        "price": float(row['price']),
+                        "xp": float(row['EV']),
+                        "fixture": row.get('opponent', 'No fixture')
+                    })
+        
+        # Chip Recommendation
+        best_chip_raw = chip_evaluation.get('best_chip') or 'NO CHIP'
+        best_chip = str(best_chip_raw).replace('_', ' ').title()
+        
+        chip_evaluations = {}
+        for chip_name, result in chip_evaluation.get('evaluations', {}).items():
+            chip_evaluations[chip_name] = {
+                "recommend": result.get('recommend', False),
+                "ev_gain": float(result.get('ev_gain', 0)),
+                "reason": result.get('reason', '')
+            }
+        
+        chip_recommendation = {
+            "best_chip": best_chip,
+            "evaluations": chip_evaluations
+        }
+        
+        return {
+            "header": header,
+            "current_squad": current_squad_list,
+            "fixture_insights": fixture_insights,
+            "transfer_recommendations": transfer_recommendations,
+            "updated_squad": updated_squad,
+            "chip_recommendation": chip_recommendation
+        }
 

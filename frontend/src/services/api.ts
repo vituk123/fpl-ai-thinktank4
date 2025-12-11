@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { EntryInfo, NewsArticle, Prediction, Recommendation } from '../types';
+import { EntryInfo, NewsArticle, Prediction, Recommendation, MLReport } from '../types';
 
 // Production Fallback Configuration
 // These values are used if import.meta.env is not available (e.g. in browser preview)
@@ -205,6 +205,19 @@ export const mlApi = {
     }
     console.warn('ML players: Unexpected response format', responseData);
     return { players: [] };
+  },
+  getMLReport: async (entryId: number, gameweek: number): Promise<MLReport> => {
+    // Use Supabase edge function proxy (consistent with other ML endpoints)
+    const response = await supabaseClient.get(`/ml-report?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6`, {
+      timeout: 120000 // 2 minute timeout for ML processing
+    });
+    // Backend returns StandardResponse format: { data: {...}, meta: {...} }
+    const responseData = response.data;
+    if (responseData?.data) {
+      return responseData.data;
+    }
+    // Fallback: if it's already the data object
+    return responseData;
   },
   getRecommendations: async (entryId: number, gameweek: number): Promise<Recommendation[]> => {
     // This is a potentially long-running request (30-60s)
