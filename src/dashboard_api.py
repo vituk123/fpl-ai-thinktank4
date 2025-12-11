@@ -1214,9 +1214,33 @@ async def get_ml_report(
         players_df = await loop.run_in_executor(None, projection_engine.calculate_projections, players_df)
         
         # Apply ML predictions (same as main.py)
+        # OPTIMIZATION: Check if predictions already exist in DB for this gameweek
         if ML_ENGINE_AVAILABLE:
-            from .main import train_and_predict_ml
-            players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+            # Try to load existing predictions first (much faster than regenerating)
+            try:
+                if db_manager:
+                    existing_predictions = db_manager.get_predictions_for_gw(gameweek, model_version)
+                    if not existing_predictions.empty and len(existing_predictions) > 100:
+                        # Merge existing predictions (cached)
+                        logger.info(f"Using cached ML predictions for GW{gameweek} ({len(existing_predictions)} players)")
+                        predictions_df = existing_predictions[['player_id', 'predicted_ev']].copy()
+                        players_df = players_df.merge(predictions_df, left_on='id', right_on='player_id', how='left')
+                        if 'predicted_ev' in players_df.columns:
+                            players_df['EV'] = players_df['predicted_ev'].fillna(players_df.get('ep_next', 0))
+                        else:
+                            players_df['EV'] = players_df.get('ep_next', 0)
+                    else:
+                        # No cached predictions, generate new ones
+                        logger.info("No cached predictions found, generating new ML predictions...")
+                        from .main import train_and_predict_ml
+                        players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+                else:
+                    from .main import train_and_predict_ml
+                    players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+            except Exception as e:
+                logger.warning(f"Error loading cached predictions, generating new ones: {e}")
+                from .main import train_and_predict_ml
+                players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
         else:
             if 'EV' not in players_df.columns:
                 players_df['EV'] = players_df.get('ep_next', 0)
