@@ -473,7 +473,7 @@ class ReportGenerator:
         if not current_squad.empty:
             squad_df = current_squad[['web_name', 'team_name', 'element_type', 'now_cost', 'EV']].copy()
             squad_df = squad_df.sort_values(by='EV', ascending=False)
-                for _, row in squad_df.iterrows():
+            for _, row in squad_df.iterrows():
                 current_squad_list.append({
                     "player": str(row['web_name']),
                     "team": str(row['team_name']),
