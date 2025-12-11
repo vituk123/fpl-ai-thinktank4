@@ -206,12 +206,11 @@ export const mlApi = {
     console.warn('ML players: Unexpected response format', responseData);
     return { players: [] };
   },
-  getMLReport: async (entryId: number, gameweek: number, fastMode: boolean = true): Promise<MLReport> => {
+  getMLReport: async (entryId: number, gameweek: number, fastMode: boolean = false): Promise<MLReport> => {
     // Use Supabase edge function proxy (consistent with other ML endpoints)
-    // fastMode=true skips expensive operations (fixture difficulty, statistical analysis, ML training)
-    // and uses cached predictions only - much faster on resource-constrained servers
+    // fastMode=false runs full ML analysis (fixture difficulty, statistical analysis, ML training)
     const response = await supabaseClient.get(`/ml-report?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&fast_mode=${fastMode}`, {
-      timeout: fastMode ? 60000 : 300000 // 1 minute for fast mode, 5 minutes for full mode
+      timeout: 300000 // 5 minute timeout for full ML report generation
     });
     // Backend returns StandardResponse format: { data: {...}, meta: {...} }
     const responseData = response.data;

@@ -1091,7 +1091,7 @@ async def get_ml_report(
     entry_id: int = Query(..., description="FPL entry ID (required)"),
     gameweek: Optional[int] = Query(None, description="Target gameweek (default: current)"),
     model_version: str = Query("v4.6", description="ML model version"),
-    fast_mode: bool = Query(False, description="Fast mode: skip expensive operations, use cached data only")
+    fast_mode: bool = Query(False, description="Fast mode: skip expensive operations (default: False for full ML)")
 ):
     """Get complete ML report data (same as main.py output) for a specific team"""
     # #region agent log
@@ -1188,42 +1188,34 @@ async def get_ml_report(
         relevant_player_ids = current_squad_ids | set(top_players['id'].head(100).tolist())
         
         # Add fixture difficulty (optimized for relevant teams, like main.py)
-        # Skip in fast_mode to save time
-        if not fast_mode:
-            try:
-                from .main import add_fixture_difficulty
-                players_df = await loop.run_in_executor(
-                    None, 
-                    lambda: add_fixture_difficulty(players_df, api_client, gameweek, db_manager, relevant_team_ids, all_fixtures=all_fixtures, bootstrap_data=bootstrap)
-                )
-            except Exception as e:
-                logger.warning(f"Could not add fixture difficulty: {e}")
-        else:
-            logger.info("Fast mode: Skipping fixture difficulty analysis")
+        try:
+            from .main import add_fixture_difficulty
+            players_df = await loop.run_in_executor(
+                None, 
+                lambda: add_fixture_difficulty(players_df, api_client, gameweek, db_manager, relevant_team_ids, all_fixtures=all_fixtures, bootstrap_data=bootstrap)
+            )
+        except Exception as e:
+            logger.warning(f"Could not add fixture difficulty: {e}")
         
         # Add statistical analysis (optimized for relevant players, like main.py)
-        # Skip in fast_mode to save time
-        if not fast_mode:
-            try:
-                from .main import add_statistical_analysis
-                history_df = None
-                if db_manager:
-                    history_df = db_manager.get_current_season_history()
-                players_df = await loop.run_in_executor(
-                    None,
-                    lambda: add_statistical_analysis(players_df, api_client, gameweek, db_manager, relevant_player_ids, fixtures=fixtures_for_gw, bootstrap_data=bootstrap, history_df=history_df)
-                )
-            except Exception as e:
-                logger.warning(f"Could not add statistical analysis: {e}")
-        else:
-            logger.info("Fast mode: Skipping statistical analysis")
+        try:
+            from .main import add_statistical_analysis
+            history_df = None
+            if db_manager:
+                history_df = db_manager.get_current_season_history()
+            players_df = await loop.run_in_executor(
+                None,
+                lambda: add_statistical_analysis(players_df, api_client, gameweek, db_manager, relevant_player_ids, fixtures=fixtures_for_gw, bootstrap_data=bootstrap, history_df=history_df)
+            )
+        except Exception as e:
+            logger.warning(f"Could not add statistical analysis: {e}")
         
         # Generate projections
         projection_engine = ProjectionEngine(config)
         players_df = await loop.run_in_executor(None, projection_engine.calculate_projections, players_df)
         
         # Apply ML predictions (same as main.py)
-        # OPTIMIZATION: Always try cached predictions first, only generate if not available
+        # OPTIMIZATION: Try cached predictions first, but always allow generation if needed
         if ML_ENGINE_AVAILABLE:
             # Try to load existing predictions first (much faster than regenerating)
             try:
@@ -1239,33 +1231,17 @@ async def get_ml_report(
                         else:
                             players_df['EV'] = players_df.get('ep_next', 0)
                     else:
-                        # No cached predictions
-                        if fast_mode:
-                            # In fast mode, skip ML generation and use projections
-                            logger.info("Fast mode: No cached predictions, using standard projections")
-                            if 'EV' not in players_df.columns:
-                                players_df['EV'] = players_df.get('ep_next', 0)
-                        else:
-                            # Generate new predictions (slow)
-                            logger.info("No cached predictions found, generating new ML predictions...")
-                            from .main import train_and_predict_ml
-                            players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
-                else:
-                    if fast_mode:
-                        if 'EV' not in players_df.columns:
-                            players_df['EV'] = players_df.get('ep_next', 0)
-                    else:
+                        # No cached predictions, generate new ones
+                        logger.info("No cached predictions found, generating new ML predictions...")
                         from .main import train_and_predict_ml
                         players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
-            except Exception as e:
-                logger.warning(f"Error loading cached predictions: {e}")
-                if fast_mode:
-                    # In fast mode, fallback to projections
-                    if 'EV' not in players_df.columns:
-                        players_df['EV'] = players_df.get('ep_next', 0)
                 else:
                     from .main import train_and_predict_ml
                     players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+            except Exception as e:
+                logger.warning(f"Error loading cached predictions, generating new ones: {e}")
+                from .main import train_and_predict_ml
+                players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
         else:
             if 'EV' not in players_df.columns:
                 players_df['EV'] = players_df.get('ep_next', 0)
