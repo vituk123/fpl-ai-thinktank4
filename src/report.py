@@ -517,8 +517,8 @@ class ReportGenerator:
         
         if recommendations and len(recommendations) > 0:
             rec = recommendations[0]
-            out_players = [{"name": p['name'], "team": p.get('team', 'Unknown')} for p in rec.get('players_out', [])]
-            in_players = [{"name": p['name'], "team": p.get('team', 'Unknown')} for p in rec.get('players_in', [])]
+            out_players = [{"name": str(to_python_type(p.get('name', ''))), "team": str(to_python_type(p.get('team', 'Unknown')))} for p in rec.get('players_out', [])]
+            in_players = [{"name": str(to_python_type(p.get('name', ''))), "team": str(to_python_type(p.get('team', 'Unknown')))} for p in rec.get('players_in', [])]
             
             transfer_recommendations["top_suggestion"] = {
                 "num_transfers": to_python_type(rec.get('num_transfers', 0)),
@@ -577,14 +577,14 @@ class ReportGenerator:
         
         # Chip Recommendation
         best_chip_raw = chip_evaluation.get('best_chip') or 'NO CHIP'
-        best_chip = str(best_chip_raw).replace('_', ' ').title()
+        best_chip = str(to_python_type(best_chip_raw)).replace('_', ' ').title()
         
         chip_evaluations = {}
         for chip_name, result in chip_evaluation.get('evaluations', {}).items():
-            chip_evaluations[chip_name] = {
+            chip_evaluations[str(to_python_type(chip_name))] = {
                 "recommend": to_python_type(result.get('recommend', False)),
                 "ev_gain": to_python_type(result.get('ev_gain', 0)),
-                "reason": str(result.get('reason', ''))
+                "reason": str(to_python_type(result.get('reason', '')))
             }
         
         chip_recommendation = {
