@@ -1238,23 +1238,40 @@ async def get_ml_report(
             # If no squad, create empty recommendations
             smart_recs = {'recommendations': []}
         else:
+            # Ensure EV column exists in players_df before merging
+            if 'EV' not in players_df.columns:
+                if 'ep_next' in players_df.columns:
+                    players_df['EV'] = players_df['ep_next'].fillna(0)
+                else:
+                    players_df['EV'] = 0
+            
             # Merge EV and other calculated columns from players_df into current_squad
             # This ensures current_squad has all the ML-enhanced data
             ev_columns = ['EV', 'predicted_ev', 'xP_raw', 'xP_adjusted', 'ep_next']
             merge_columns = ['id'] + [col for col in ev_columns if col in players_df.columns]
             
-            if merge_columns:
+            if len(merge_columns) > 1:  # More than just 'id'
                 current_squad = current_squad.merge(
                     players_df[merge_columns],
                     on='id',
                     how='left',
                     suffixes=('', '_new')
                 )
-                # If EV column doesn't exist, create it from ep_next or set to 0
-                if 'EV' not in current_squad.columns:
-                    current_squad['EV'] = current_squad.get('ep_next', 0)
-                    if current_squad['EV'].isna().any():
-                        current_squad['EV'] = current_squad['EV'].fillna(0)
+            
+            # Ensure EV column exists in current_squad (fallback if merge didn't work)
+            if 'EV' not in current_squad.columns:
+                if 'ep_next' in current_squad.columns:
+                    current_squad['EV'] = current_squad['ep_next'].fillna(0)
+                elif 'ep_next' in players_df.columns:
+                    # Map ep_next from players_df
+                    ep_map = players_df.set_index('id')['ep_next'].to_dict()
+                    current_squad['EV'] = current_squad['id'].map(ep_map).fillna(0)
+                else:
+                    current_squad['EV'] = 0
+            
+            # Fill any NaN values in EV
+            if current_squad['EV'].isna().any():
+                current_squad['EV'] = current_squad['EV'].fillna(0)
             
             current_squad_ids_set = set(current_squad['id'])
             available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
