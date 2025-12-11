@@ -1238,6 +1238,24 @@ async def get_ml_report(
             # If no squad, create empty recommendations
             smart_recs = {'recommendations': []}
         else:
+            # Merge EV and other calculated columns from players_df into current_squad
+            # This ensures current_squad has all the ML-enhanced data
+            ev_columns = ['EV', 'predicted_ev', 'xP_raw', 'xP_adjusted', 'ep_next']
+            merge_columns = ['id'] + [col for col in ev_columns if col in players_df.columns]
+            
+            if merge_columns:
+                current_squad = current_squad.merge(
+                    players_df[merge_columns],
+                    on='id',
+                    how='left',
+                    suffixes=('', '_new')
+                )
+                # If EV column doesn't exist, create it from ep_next or set to 0
+                if 'EV' not in current_squad.columns:
+                    current_squad['EV'] = current_squad.get('ep_next', 0)
+                    if current_squad['EV'].isna().any():
+                        current_squad['EV'] = current_squad['EV'].fillna(0)
+            
             current_squad_ids_set = set(current_squad['id'])
             available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
         
@@ -1254,7 +1272,7 @@ async def get_ml_report(
             # #region agent log
             try:
                 with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1216","message":"Before generate_smart_recommendations","data":{"freeTransfers":free_transfers,"bank":bank,"availablePlayersLen":len(available_players)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                    f.write(json.dumps({"location":"dashboard_api.py:1250","message":"Before generate_smart_recommendations","data":{"freeTransfers":free_transfers,"bank":bank,"availablePlayersLen":len(available_players),"currentSquadHasEV":'EV' in current_squad.columns},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
             except: pass
             # #endregion
             
