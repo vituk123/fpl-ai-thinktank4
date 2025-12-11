@@ -1088,6 +1088,14 @@ async def get_ml_report(
     model_version: str = Query("v4.6", description="ML model version")
 ):
     """Get complete ML report data (same as main.py output) for a specific team"""
+    # #region agent log
+    import json
+    try:
+        with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"location":"dashboard_api.py:1084","message":"ML report endpoint entry","data":{"entry_id":entry_id,"gameweek":gameweek,"model_version":model_version},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+    except: pass
+    # #endregion
+    
     if not api_client or not db_manager:
         raise HTTPException(status_code=503, detail="API client or database not available")
     
@@ -1096,6 +1104,13 @@ async def get_ml_report(
         from .chips import ChipEvaluator
         from .report import ReportGenerator
         loop = asyncio.get_event_loop()
+        
+        # #region agent log
+        try:
+            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1098","message":"After imports and loop setup","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         
         # Get current gameweek if not specified
         if gameweek is None:
@@ -1111,8 +1126,20 @@ async def get_ml_report(
         players_df['position'] = players_df['element_type']
         
         # Get user's entry info and history
+        # #region agent log
+        try:
+            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1113","message":"Before entry info fetch","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         entry_info = await loop.run_in_executor(None, api_client.get_entry_info, entry_id, True)
         entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
+        # #region agent log
+        try:
+            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1115","message":"After entry info fetch","data":{"hasEntryInfo":bool(entry_info),"hasEntryHistory":bool(entry_history)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         
         # Get current squad (like main.py)
         try:
@@ -1200,22 +1227,40 @@ async def get_ml_report(
         bank = entry_history.get('current', [{}])[-1].get('bank', 0) / 10.0
         
         # Generate transfer recommendations (like main.py)
-        current_squad_ids_set = set(current_squad['id'])
-        available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
-        
-        # Calculate free transfers
-        free_transfers = 1
+        # #region agent log
         try:
-            current_event = next((e for e in entry_history.get('current', []) if e.get('event') == gameweek - 1), None)
-            if current_event:
-                free_transfers = current_event.get('event_transfers', 0) + 1
-                free_transfers = min(free_transfers, 2)
-        except:
-            pass
+            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1202","message":"Before transfer recommendations","data":{"currentSquadEmpty":current_squad.empty if not current_squad.empty else True,"currentSquadLen":len(current_squad)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         
-        smart_recs = optimizer.generate_smart_recommendations(
-            current_squad, available_players, bank, free_transfers, max_transfers=4
-        )
+        if current_squad.empty:
+            # If no squad, create empty recommendations
+            smart_recs = {'recommendations': []}
+        else:
+            current_squad_ids_set = set(current_squad['id'])
+            available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
+        
+            # Calculate free transfers
+            free_transfers = 1
+            try:
+                current_event = next((e for e in entry_history.get('current', []) if e.get('event') == gameweek - 1), None)
+                if current_event:
+                    free_transfers = current_event.get('event_transfers', 0) + 1
+                    free_transfers = min(free_transfers, 2)
+            except:
+                pass
+            
+            # #region agent log
+            try:
+                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"location":"dashboard_api.py:1216","message":"Before generate_smart_recommendations","data":{"freeTransfers":free_transfers,"bank":bank,"availablePlayersLen":len(available_players)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+            except: pass
+            # #endregion
+            
+            smart_recs = optimizer.generate_smart_recommendations(
+                current_squad, available_players, bank, free_transfers, max_transfers=4
+            )
         
         # Apply learning system if available
         if ML_ENGINE_AVAILABLE and MLEngine:
@@ -1250,6 +1295,13 @@ async def get_ml_report(
             }
         )
     except Exception as e:
+        # #region agent log
+        import traceback
+        try:
+            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1227","message":"Exception in ML report endpoint","data":{"error":str(e),"errorType":type(e).__name__,"traceback":traceback.format_exc()[:500]},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         logger.error(f"Error generating ML report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate ML report: {str(e)}")
 
