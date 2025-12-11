@@ -1335,10 +1335,9 @@ async def get_ml_report(
         import traceback
         error_traceback = traceback.format_exc()
         logger.error(f"Error generating ML report: {e}", exc_info=True)
-        # Include more details in error response for debugging
+        # Include traceback in error response for debugging (limit to 2000 chars)
         error_detail = f"Failed to generate ML report: {str(e)}"
-        if logger.level <= logging.DEBUG:
-            error_detail += f"\nTraceback: {error_traceback[:1000]}"
+        error_detail += f"\nTraceback: {error_traceback[:2000]}"
         raise HTTPException(status_code=500, detail=error_detail)
 
 
