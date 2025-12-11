@@ -1294,16 +1294,17 @@ async def get_ml_report(
                 "generated_at": datetime.now().isoformat()
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
-        # #region agent log
         import traceback
-        try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1227","message":"Exception in ML report endpoint","data":{"error":str(e),"errorType":type(e).__name__,"traceback":traceback.format_exc()[:500]},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
+        error_traceback = traceback.format_exc()
         logger.error(f"Error generating ML report: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate ML report: {str(e)}")
+        # Include more details in error response for debugging
+        error_detail = f"Failed to generate ML report: {str(e)}"
+        if logger.level <= logging.DEBUG:
+            error_detail += f"\nTraceback: {error_traceback[:1000]}"
+        raise HTTPException(status_code=500, detail=error_detail)
 
 
 # ==================== OPTIMIZE TEAM ENDPOINT ====================
