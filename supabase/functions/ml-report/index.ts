@@ -16,14 +16,31 @@ Deno.serve(async (req: Request) => {
 
   try {
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
+    console.log('ml-report: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
+    
     if (!renderApiUrl) {
-      throw new Error('RENDER_API_URL environment variable not set')
+      console.error('ml-report: RENDER_API_URL environment variable not set')
+      return new Response(
+        JSON.stringify({ 
+          error: 'ML service configuration error: RENDER_API_URL not set in Supabase environment variables',
+          details: 'Please set RENDER_API_URL secret in Supabase'
+        }),
+        { 
+          status: 503, 
+          headers: { 
+            'Content-Type': 'application/json', 
+            'Access-Control-Allow-Origin': '*' 
+          } 
+        }
+      )
     }
 
     const url = new URL(req.url)
     const entryId = url.searchParams.get('entry_id')
     const gameweek = url.searchParams.get('gameweek')
     const modelVersion = url.searchParams.get('model_version') || 'v4.6'
+
+    console.log('ml-report: Request params:', { entryId, gameweek, modelVersion })
 
     if (!entryId) {
       return new Response(
@@ -41,11 +58,13 @@ Deno.serve(async (req: Request) => {
 
     // Forward request to Render FastAPI
     const renderUrl = `${renderApiUrl}/api/v1/ml/report?${params.toString()}`
+    console.log('ml-report: Calling Render URL:', renderUrl.replace(renderApiUrl, '[RENDER_URL]'))
     
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout for ML
+    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout for ML report generation
 
     try {
+      console.log('ml-report: Starting fetch to Render...')
       const response = await fetch(renderUrl, {
         method: req.method,
         headers: {
@@ -53,6 +72,8 @@ Deno.serve(async (req: Request) => {
         },
         signal: controller.signal,
       })
+
+      console.log('ml-report: Render response status:', response.status)
 
       clearTimeout(timeoutId)
 
@@ -81,6 +102,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const data = await response.json()
+      console.log('ml-report: Render response received, data keys:', Object.keys(data))
 
       return new Response(
         JSON.stringify(data),
