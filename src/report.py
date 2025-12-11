@@ -443,7 +443,22 @@ class ReportGenerator:
         Generate report data as JSON structure (same as generate_report but returns dict instead of markdown).
         """
         from datetime import datetime
+        import numpy as np
         from .utils import price_from_api
+        
+        def to_python_type(value):
+            """Convert numpy types to native Python types for JSON serialization"""
+            if isinstance(value, (np.integer, np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+                return int(value)
+            elif isinstance(value, (np.floating, np.float_, np.float16, np.float32, np.float64)):
+                return float(value)
+            elif isinstance(value, (np.bool_, np.bool8)):
+                return bool(value)
+            elif isinstance(value, np.ndarray):
+                return value.tolist()
+            elif pd.isna(value):
+                return None
+            return value
         
         # Header
         header = {
@@ -458,13 +473,13 @@ class ReportGenerator:
         if not current_squad.empty:
             squad_df = current_squad[['web_name', 'team_name', 'element_type', 'now_cost', 'EV']].copy()
             squad_df = squad_df.sort_values(by='EV', ascending=False)
-            for _, row in squad_df.iterrows():
+                for _, row in squad_df.iterrows():
                 current_squad_list.append({
-                    "player": row['web_name'],
-                    "team": row['team_name'],
-                    "pos": int(row['element_type']),
-                    "price": float(row['now_cost'] / 10.0),
-                    "xp": float(row['EV'])
+                    "player": str(row['web_name']),
+                    "team": str(row['team_name']),
+                    "pos": to_python_type(row['element_type']),
+                    "price": to_python_type(row['now_cost'] / 10.0),
+                    "xp": to_python_type(row['EV'])
                 })
         
         # Fixture Insights
@@ -478,22 +493,22 @@ class ReportGenerator:
             best_3gw = players_df.nsmallest(5, 'fdr_3gw')[['web_name', 'team_name', 'fdr_3gw']]
             for _, row in best_3gw.iterrows():
                 fixture_insights["best_fixture_runs"].append({
-                    "player": row['web_name'],
-                    "team": row['team_name'],
-                    "avg_fdr": float(row['fdr_3gw'])
+                    "player": str(row['web_name']),
+                    "team": str(row['team_name']),
+                    "avg_fdr": to_python_type(row['fdr_3gw'])
                 })
         
         if 'dgw_probability' in players_df.columns:
             dgw_teams = players_df[players_df['dgw_probability'] > 0.5].groupby('team_name')['dgw_probability'].first()
             for team, prob in dgw_teams.items():
                 fixture_insights["dgw_alerts"].append({
-                    "team": team,
-                    "probability": float(prob)
+                    "team": str(to_python_type(team)),
+                    "probability": to_python_type(prob)
                 })
         
         if 'bgw_probability' in players_df.columns:
             bgw_teams = players_df[players_df['bgw_probability'] > 0.5]['team_name'].unique()
-            fixture_insights["bgw_alerts"] = [{"team": team} for team in bgw_teams]
+            fixture_insights["bgw_alerts"] = [{"team": str(to_python_type(team))} for team in bgw_teams]
         
         # Transfer Recommendations
         transfer_recommendations = {
@@ -506,8 +521,8 @@ class ReportGenerator:
             in_players = [{"name": p['name'], "team": p.get('team', 'Unknown')} for p in rec.get('players_in', [])]
             
             transfer_recommendations["top_suggestion"] = {
-                "num_transfers": rec.get('num_transfers', 0),
-                "net_ev_gain": float(rec.get('net_ev_gain', 0)),
+                "num_transfers": to_python_type(rec.get('num_transfers', 0)),
+                "net_ev_gain": to_python_type(rec.get('net_ev_gain', 0)),
                 "players_out": out_players,
                 "players_in": in_players
             }
@@ -534,12 +549,12 @@ class ReportGenerator:
                 
                 for _, row in starting_xi_df.iterrows():
                     updated_squad["starting_xi"].append({
-                        "player": row['web_name'],
-                        "team": row['team_name'],
-                        "pos": int(row['element_type']),
-                        "price": float(row['price']),
-                        "xp": float(row['EV']),
-                        "fixture": row.get('opponent', 'No fixture')
+                        "player": str(row['web_name']),
+                        "team": str(row['team_name']),
+                        "pos": to_python_type(row['element_type']),
+                        "price": to_python_type(row['price']),
+                        "xp": to_python_type(row['EV']),
+                        "fixture": str(row.get('opponent', 'No fixture'))
                     })
             
             # Bench
@@ -552,12 +567,12 @@ class ReportGenerator:
                 
                 for _, row in bench_df.iterrows():
                     updated_squad["bench"].append({
-                        "player": row['web_name'],
-                        "team": row['team_name'],
-                        "pos": int(row['element_type']),
-                        "price": float(row['price']),
-                        "xp": float(row['EV']),
-                        "fixture": row.get('opponent', 'No fixture')
+                        "player": str(row['web_name']),
+                        "team": str(row['team_name']),
+                        "pos": to_python_type(row['element_type']),
+                        "price": to_python_type(row['price']),
+                        "xp": to_python_type(row['EV']),
+                        "fixture": str(row.get('opponent', 'No fixture'))
                     })
         
         # Chip Recommendation
@@ -567,9 +582,9 @@ class ReportGenerator:
         chip_evaluations = {}
         for chip_name, result in chip_evaluation.get('evaluations', {}).items():
             chip_evaluations[chip_name] = {
-                "recommend": result.get('recommend', False),
-                "ev_gain": float(result.get('ev_gain', 0)),
-                "reason": result.get('reason', '')
+                "recommend": to_python_type(result.get('recommend', False)),
+                "ev_gain": to_python_type(result.get('ev_gain', 0)),
+                "reason": str(result.get('reason', ''))
             }
         
         chip_recommendation = {
