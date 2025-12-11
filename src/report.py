@@ -592,7 +592,17 @@ class ReportGenerator:
             "evaluations": chip_evaluations
         }
         
-        return {
+        # Final conversion to ensure all values are JSON-serializable
+        def convert_dict_values(obj):
+            """Recursively convert numpy types in dictionaries and lists"""
+            if isinstance(obj, dict):
+                return {str(k): convert_dict_values(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_dict_values(item) for item in obj]
+            else:
+                return to_python_type(obj)
+        
+        result = {
             "header": header,
             "current_squad": current_squad_list,
             "fixture_insights": fixture_insights,
@@ -600,4 +610,7 @@ class ReportGenerator:
             "updated_squad": updated_squad,
             "chip_recommendation": chip_recommendation
         }
+        
+        # Final pass to convert any remaining numpy types
+        return convert_dict_values(result)
 
