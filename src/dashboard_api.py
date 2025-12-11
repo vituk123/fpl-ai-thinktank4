@@ -747,6 +747,8 @@ async def get_transfer_recommendations(
             current_squad_df, available_players, bank, free_transfers, max_transfers=max_transfers
         )
         
+        logger.info(f"Generated {len(recommendations.get('recommendations', []))} raw recommendations")
+        
         # Apply learning system if available
         if ML_ENGINE_AVAILABLE and MLEngine:
             ml_engine_instance = MLEngine(db_manager, model_version=model_version)
@@ -756,12 +758,80 @@ async def get_transfer_recommendations(
                     db_manager, api_client, entry_id, gameweek,
                     recommendations['recommendations'], ml_engine_instance
                 )
+                logger.info(f"After learning system: {len(recommendations.get('recommendations', []))} recommendations")
+        
+        # Transform recommendations to frontend format
+        # Frontend expects: [{ element_out: Player, element_in: Player, score: number, reasoning: string }]
+        # Backend returns: [{ players_out: [...], players_in: [...], net_ev_gain: number, ... }]
+        transformed_recommendations = []
+        raw_recs = recommendations.get('recommendations', [])
+        logger.info(f"Transforming {len(raw_recs)} recommendations to frontend format")
+        
+        for rec in raw_recs:
+            players_out = rec.get('players_out', [])
+            players_in = rec.get('players_in', [])
+            
+            # Create individual transfer pairs (1-to-1 mapping)
+            # If multiple transfers, create pairs in order
+            num_transfers = min(len(players_out), len(players_in))
+            
+            for i in range(num_transfers):
+                player_out_info = players_out[i]
+                player_in_info = players_in[i]
+                
+                # Get full player data from DataFrames
+                player_out_id = player_out_info.get('id')
+                player_in_id = player_in_info.get('id')
+                
+                # Find full player data
+                player_out_df = current_squad_df[current_squad_df['id'] == player_out_id]
+                player_in_df = players_df[players_df['id'] == player_in_id]
+                
+                if player_out_df.empty or player_in_df.empty:
+                    continue
+                
+                player_out = player_out_df.iloc[0].to_dict()
+                player_in = player_in_df.iloc[0].to_dict()
+                
+                # Build frontend-compatible recommendation
+                transformed_rec = {
+                    'element_out': {
+                        'id': player_out.get('id'),
+                        'web_name': player_out.get('web_name', player_out_info.get('name', 'Unknown')),
+                        'team_code': player_out.get('team', 0),
+                        'element_type': player_out.get('element_type', 0),
+                        'now_cost': player_out.get('now_cost', 0),
+                        'selected_by_percent': str(player_out.get('selected_by_percent', 0)),
+                        'form': str(player_out.get('form', 0)),
+                        'total_points': player_out.get('total_points', 0),
+                    },
+                    'element_in': {
+                        'id': player_in.get('id'),
+                        'web_name': player_in.get('web_name', player_in_info.get('name', 'Unknown')),
+                        'team_code': player_in.get('team', 0),
+                        'element_type': player_in.get('element_type', 0),
+                        'now_cost': player_in.get('now_cost', 0),
+                        'selected_by_percent': str(player_in.get('selected_by_percent', 0)),
+                        'form': str(player_in.get('form', 0)),
+                        'total_points': player_in.get('total_points', 0),
+                    },
+                    'score': rec.get('net_ev_gain_adjusted', rec.get('net_ev_gain', 0)),
+                    'reasoning': rec.get('description', f"{rec.get('strategy', 'Transfer')} - Expected gain: {rec.get('net_ev_gain_adjusted', 0):.2f} points")
+                }
+                
+                # Add more context to reasoning if multiple transfers
+                if num_transfers > 1:
+                    transformed_rec['reasoning'] = f"Part of {num_transfers}-transfer strategy: {rec.get('description', 'Optimization')} - Net gain: {rec.get('net_ev_gain_adjusted', 0):.2f} points"
+                
+                transformed_recommendations.append(transformed_rec)
+        
+        logger.info(f"Transformed to {len(transformed_recommendations)} frontend-compatible recommendations")
         
         return StandardResponse(
             data={
                 "entry_id": entry_id,
                 "gameweek": gameweek,
-                "recommendations": recommendations['recommendations'],
+                "recommendations": transformed_recommendations,
                 "forced_transfers": recommendations.get('num_forced_transfers', 0),
                 "forced_players": recommendations.get('forced_players', []),
                 "free_transfers": free_transfers,
@@ -872,6 +942,144 @@ async def generate_ml_predictions(
     except Exception as e:
         logger.error(f"Error generating ML predictions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate predictions: {str(e)}")
+
+@app.get("/api/v1/ml/players")
+async def get_ml_enhanced_players(
+    gameweek: Optional[int] = Query(None, description="Target gameweek (default: current)"),
+    entry_id: Optional[int] = Query(None, description="FPL entry ID (required for team-specific ML output)"),
+    model_version: str = Query("v4.6", description="ML model version"),
+    limit: int = Query(500, description="Maximum number of players to return")
+):
+    """Get full ML-enhanced player data (same as main.py output) for a specific team"""
+    if not api_client or not db_manager:
+        raise HTTPException(status_code=503, detail="API client or database not available")
+    
+    if not entry_id:
+        raise HTTPException(status_code=400, detail="entry_id is required")
+    
+    try:
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        # Get current gameweek if not specified
+        if gameweek is None:
+            bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
+            gameweek = api_client.get_current_gameweek()
+        
+        # Load all players with bootstrap data
+        bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
+        players_df = pd.DataFrame(bootstrap['elements'])
+        teams_df = pd.DataFrame(bootstrap['teams'])
+        team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
+        players_df['team_name'] = players_df['team'].map(team_map)
+        
+        # Get user's entry info and squad (like main.py does)
+        entry_info = await loop.run_in_executor(None, api_client.get_entry_info, entry_id, True)
+        entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
+        
+        # Get current squad IDs for optimization (like main.py)
+        try:
+            optimizer = TransferOptimizer(config)
+            current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
+            current_squad_ids = set(current_squad['id'].tolist()) if not current_squad.empty else set()
+            current_squad_teams = set(current_squad['team'].dropna().unique()) if not current_squad.empty else set()
+        except:
+            current_squad_ids = set()
+            current_squad_teams = set()
+        
+        # Get fixtures for fixture difficulty analysis
+        all_fixtures = await loop.run_in_executor(None, api_client.get_fixtures, True)
+        fixtures_for_gw = [f for f in all_fixtures if f.get('event') == gameweek]
+        
+        # Identify top transfer targets (top 200) to limit processing (like main.py)
+        top_players = players_df.nlargest(200, ['now_cost', 'total_points'], keep='all')
+        relevant_team_ids = current_squad_teams | set(top_players['team'].dropna().unique())
+        relevant_player_ids = current_squad_ids | set(top_players['id'].head(100).tolist())
+        
+        # Add fixture difficulty (optimized for relevant teams, like main.py)
+        try:
+            from main import add_fixture_difficulty
+            players_df = await loop.run_in_executor(
+                None, 
+                lambda: add_fixture_difficulty(players_df, api_client, gameweek, db_manager, relevant_team_ids, all_fixtures=all_fixtures, bootstrap_data=bootstrap)
+            )
+        except:
+            logger.warning("Could not add fixture difficulty analysis")
+        
+        # Add statistical analysis (optimized for relevant players, like main.py)
+        try:
+            from main import add_statistical_analysis
+            history_df = None
+            if db_manager:
+                history_df = db_manager.get_current_season_history()
+            players_df = await loop.run_in_executor(
+                None,
+                lambda: add_statistical_analysis(players_df, api_client, gameweek, db_manager, relevant_player_ids, fixtures=fixtures_for_gw, bootstrap_data=bootstrap, history_df=history_df)
+            )
+        except Exception as e:
+            logger.warning(f"Could not add statistical analysis: {e}")
+        
+        # Generate projections
+        projection_engine = ProjectionEngine(config)
+        players_df = await loop.run_in_executor(None, projection_engine.calculate_projections, players_df)
+        
+        # Apply ML predictions (same as main.py)
+        if ML_ENGINE_AVAILABLE:
+            from main import train_and_predict_ml
+            players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
+        else:
+            if 'EV' not in players_df.columns:
+                players_df['EV'] = players_df.get('ep_next', 0)
+        
+        # Apply EO adjustment (like main.py)
+        try:
+            eo_calc = EOCalculator(config)
+            players_df = eo_calc.apply_eo_adjustment(players_df, entry_info.get('summary_overall_rank', 100000))
+        except Exception as e:
+            logger.warning(f"Could not apply EO adjustment: {e}")
+        
+        # Sort by EV descending
+        players_df = players_df.sort_values('EV', ascending=False)
+        
+        # Limit results
+        if limit > 0:
+            players_df = players_df.head(limit)
+        
+        # Convert to dict for JSON serialization
+        # Select key columns for frontend
+        display_columns = [
+            'id', 'web_name', 'first_name', 'second_name', 'team', 'team_name',
+            'element_type', 'now_cost', 'selected_by_percent', 'form', 'total_points',
+            'EV', 'predicted_ev', 'xP_raw', 'xP_adjusted', 'ep_next',
+            'status', 'chance_of_playing_next_round', 'news', 'news_added',
+            'transfers_in', 'transfers_out', 'transfers_in_event', 'transfers_out_event',
+            'points_per_game', 'minutes', 'goals_scored', 'assists', 'clean_sheets',
+            'goals_conceded', 'yellow_cards', 'red_cards', 'saves', 'bonus',
+            'bps', 'influence', 'creativity', 'threat', 'ict_index'
+        ]
+        
+        # Only include columns that exist
+        available_columns = [col for col in display_columns if col in players_df.columns]
+        result_df = players_df[available_columns].copy()
+        
+        # Convert NaN to None for JSON serialization
+        result_dict = result_df.where(pd.notnull(result_df), None).to_dict('records')
+        
+        return StandardResponse(
+            data={
+                "players": result_dict,
+                "gameweek": gameweek,
+                "model_version": model_version,
+                "count": len(result_dict),
+                "columns": available_columns
+            },
+            meta={
+                "generated_at": datetime.now().isoformat()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating ML-enhanced players: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate ML-enhanced players: {str(e)}")
 
 
 # ==================== OPTIMIZE TEAM ENDPOINT ====================

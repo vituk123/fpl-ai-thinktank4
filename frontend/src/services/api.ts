@@ -6,8 +6,7 @@ import { EntryInfo, NewsArticle, Prediction, Recommendation } from '../types';
 const FALLBACK_ENV = {
   VITE_API_BASE_URL: 'https://fpl-api-backend.onrender.com/api/v1',
   VITE_SUPABASE_FUNCTIONS_URL: 'https://sdezcbesdubplacfxibc.supabase.co/functions/v1',
-  VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkZXpjYmVzZHVicGxhY2Z4aWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwODAyNTYsImV4cCI6MjA3OTY1NjI1Nn0.hT-2UDR0HbIwAWQHmw6T-QO5jFwWBuyMI2qgPwJRZAE',
-  VITE_SUPABASE_URL: 'https://sdezcbesdubplacfxibc.supabase.co'
+  VITE_SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkZXpjYmVzZHVicGxhY2Z4aWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwODAyNTYsImV4cCI6MjA3OTY1NjI1Nn0.hT-2UDR0HbIwAWQHmw6T-QO5jFwWBuyMI2qgPwJRZAE'
 };
 
 // Helper to safely get environment variables
@@ -23,15 +22,49 @@ const getEnv = (key: keyof typeof FALLBACK_ENV): string => {
   } catch (e) {
     // Ignore errors accessing import.meta
   }
-  // Return fallback value
-  return FALLBACK_ENV[key] || '';
+  return FALLBACK_ENV[key];
 };
 
 // Environment Variables
 const API_BASE_URL = getEnv('VITE_API_BASE_URL');
 const SUPABASE_FUNCTIONS_URL = getEnv('VITE_SUPABASE_FUNCTIONS_URL');
 const SUPABASE_ANON_KEY = getEnv('VITE_SUPABASE_ANON_KEY');
-const SUPABASE_URL = getEnv('VITE_SUPABASE_URL') || 'https://sdezcbesdubplacfxibc.supabase.co';
+
+// Get Supabase URL for storage (extract from functions URL or use separate env var)
+const getSupabaseUrl = (): string => {
+  try {
+    // Try to get from env var first
+    const meta = import.meta;
+    // @ts-ignore
+    if (meta && meta.env && meta.env.VITE_SUPABASE_URL) {
+      // @ts-ignore
+      const url = meta.env.VITE_SUPABASE_URL;
+      // Remove trailing slash if present
+      return url.replace(/\/$/, '');
+    }
+  } catch (e) {
+    // Ignore
+  }
+  // Extract from functions URL: https://xxx.supabase.co/functions/v1 -> https://xxx.supabase.co
+  const functionsUrl = SUPABASE_FUNCTIONS_URL;
+  if (functionsUrl) {
+    // Match: https://xxx.supabase.co or https://xxx.supabase.co/functions/v1
+    const match = functionsUrl.match(/^(https?:\/\/[^\/]+)/);
+    if (match) {
+      return match[1];
+    }
+  }
+  // Fallback - use the actual Supabase project URL
+  return 'https://sdezcbesdubplacfxibc.supabase.co';
+};
+
+const SUPABASE_URL = getSupabaseUrl();
+// Log for debugging
+if (typeof window !== 'undefined') {
+  console.log('[Supabase Config] Base URL:', SUPABASE_URL);
+  console.log('[Supabase Config] Functions URL:', SUPABASE_FUNCTIONS_URL);
+  console.log('[Supabase Config] Example image URL:', `${SUPABASE_URL}/storage/v1/object/public/fpl-images/players/1.png`);
+}
 
 // Clients
 const renderClient = axios.create({
@@ -53,32 +86,23 @@ export const entryApi = {
   getEntry: async (entryId: number): Promise<EntryInfo> => {
     try {
       const response = await renderClient.get(`/entry/${entryId}/info`);
-      // Backend returns StandardResponse with data field containing full entry info
-      const responseData = response.data?.data || response.data;
-      
-      // Map backend response to EntryInfo interface
-      const entryInfo: EntryInfo = {
-        id: responseData.id || responseData.entry_id || entryId,
-        player_first_name: responseData.player_first_name || '',
-        player_last_name: responseData.player_last_name || '',
-        player_region_name: responseData.player_region_name || '',
-        player_region_iso_code_short: responseData.player_region_iso_code_short || '',
-        player_region_iso_code_long: responseData.player_region_iso_code_long || '',
-        summary_overall_points: responseData.summary_overall_points || 0,
-        summary_overall_rank: responseData.summary_overall_rank || 0,
-        summary_event_points: responseData.summary_event_points || 0,
-        summary_event_rank: responseData.summary_event_rank || 0,
-        current_event: responseData.current_event || 1,
-        name: responseData.name || responseData.team_name || 'Unknown Team',
-        kit: responseData.kit,
-      };
-      
-      return entryInfo;
+      // Handle both direct data and StandardResponse format
+      return response.data?.data || response.data;
     } catch (error: any) {
       console.error("Error fetching entry:", error);
-      const message = error.response?.status === 404 
-        ? `Entry ID ${entryId} not found. Please check your entry ID.`
-        : error.response?.data?.detail || error.message || 'Failed to fetch entry information';
+      
+      // Provide more helpful error messages
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_RESET')) {
+        throw new Error('Cannot connect to backend server. The API may be down or unreachable.');
+      }
+      if (error.response?.status === 404) {
+        throw new Error(`Entry ID ${entryId} not found. Please check your entry ID.`);
+      }
+      if (error.response?.status === 500) {
+        throw new Error('Backend server error. Please try again later.');
+      }
+      
+      const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch entry information';
       throw new Error(message);
     }
   },
@@ -86,94 +110,73 @@ export const entryApi = {
 
 export const dashboardApi = {
   getTeamHistory: async (entryId: number) => {
-    try {
     const response = await renderClient.get(`/dashboard/team/rank-progression?entry_id=${entryId}`);
-      // Handle both direct data and nested data structure
-      return response.data?.data || response.data || response;
-    } catch (error: any) {
-      console.error("Error fetching team history:", error);
-      const message = error.response?.status === 404
-        ? 'Rank progression endpoint not found. The backend may need to be updated.'
-        : error.response?.data?.detail || error.message || 'Failed to fetch team history';
-      throw new Error(message);
-    }
+    return response.data;
   },
   getValueTracker: async (entryId: number) => {
-    // This endpoint may not exist in all backend versions
-    try {
     const response = await renderClient.get(`/dashboard/team/value-tracker?entry_id=${entryId}`);
-      // Handle both direct data and nested data structure
-      return response.data?.data || response.data || response;
-    } catch (error: any) {
-      // If 404, return null to indicate endpoint doesn't exist
-      if (error.response?.status === 404) {
-        console.warn('Value tracker endpoint not available');
-        return null;
-      }
-      console.error("Error fetching value tracker:", error);
-      throw error;
-    }
-  },
-  getCurrentGameweek: async () => {
-    try {
-      const response = await renderClient.get(`/api/v1/gameweek/current`);
-      return response.data?.data || response.data || null;
-    } catch (error: any) {
-      console.error("Error fetching current gameweek:", error);
-      const message = error.response?.data?.detail || error.message || 'Failed to fetch current gameweek';
-      throw new Error(message);
-    }
+    return response.data;
   },
   getLeagues: async (entryId: number) => {
-    try {
-      const response = await renderClient.get(`/api/v1/entry/${entryId}/leagues`);
+      const response = await renderClient.get(`/entry/${entryId}/leagues`);
       // Handle StandardResponse format
-      if (response.data?.data) {
-        return Array.isArray(response.data.data) ? response.data.data : [];
-      }
-      return Array.isArray(response.data) ? response.data : [];
-    } catch (error: any) {
-      console.error("Error fetching leagues:", error);
-      if (error.response?.status === 404) {
-        throw new Error('Leagues endpoint not found. Backend may need to be updated.');
-      }
-      const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch leagues';
-      throw new Error(message);
-    }
+    return response.data?.data || response.data || [];
   },
   getLeagueStandings: async (entryId: number, leagueId: number) => {
-    try {
-      const response = await renderClient.get(`/api/v1/entry/${entryId}/league/${leagueId}/standings`);
+      const response = await renderClient.get(`/entry/${entryId}/league/${leagueId}/standings`);
       // Handle StandardResponse format
-      if (response.data?.data) {
-        return response.data.data;
-      }
-      return response.data || { standings: [], league_name: 'Unknown' };
-    } catch (error: any) {
-      console.error("Error fetching league standings:", error);
-      if (error.response?.status === 404) {
-        throw new Error('League standings endpoint not found. Backend may need to be updated.');
-      }
-      const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch league standings';
-      throw new Error(message);
-    }
+    return response.data?.data || response.data || { standings: [], league_name: 'Unknown' };
   }
 };
 
 export const liveApi = {
   getLiveGameweek: async (gameweek: number, entryId: number) => {
+    console.log(`liveApi.getLiveGameweek: gameweek=${gameweek}, entryId=${entryId}`);
+    
+    // Try Render backend first (more comprehensive data with minutes, status, opponent, etc.)
     try {
-      const response = await supabaseClient.get(`/live-gameweek?gameweek=${gameweek}&entry_id=${entryId}`);
-      // Supabase Edge Function returns { data: {...}, meta: {...} }
-      // Handle both direct data and nested data structure
-      if (response.data) {
-        return response.data; // Already has data and meta fields
-      }
-      return response;
-    } catch (error: any) {
-      console.error("Error fetching live data:", error);
-      const message = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to load live data';
+      const url = `/live/gameweek/${gameweek}?entry_id=${entryId}`;
+      console.log(`liveApi: Trying Render backend: ${url}`);
+      const response = await renderClient.get(url);
+      console.log("liveApi: Render backend response:", {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        dataStructure: response.data
+      });
+      // Render backend returns: { data: {...}, meta: {...} } in StandardResponse format
+      return response.data;
+    } catch (renderError: any) {
+      console.warn("liveApi: Render backend failed:", {
+        message: renderError.message,
+        status: renderError.response?.status,
+        data: renderError.response?.data
+      });
+      console.warn("liveApi: Trying Supabase Edge Function as fallback");
+      
+      // Fallback to Supabase Edge Function
+      try {
+        const url = `/live-gameweek?gameweek=${gameweek}&entry_id=${entryId}`;
+        console.log(`liveApi: Trying Supabase Edge Function: ${url}`);
+        const response = await supabaseClient.get(url);
+        console.log("liveApi: Supabase Edge Function response:", {
+          status: response.status,
+          hasData: !!response.data,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          dataStructure: response.data
+        });
+        // Edge Function returns: { data: {...}, meta: {...} }
+        return response.data;
+      } catch (edgeError: any) {
+        console.error("liveApi: Both endpoints failed:", {
+          renderError: renderError.message,
+          edgeError: edgeError.message,
+          edgeStatus: edgeError.response?.status,
+          edgeData: edgeError.response?.data
+        });
+        const message = edgeError.response?.data?.error || edgeError.response?.data?.message || edgeError.message || 'Failed to fetch live data';
       throw new Error(message);
+      }
     }
   }
 };
@@ -181,45 +184,90 @@ export const liveApi = {
 export const mlApi = {
   getPredictions: async (gameweek: number, entryId: number): Promise<Prediction[]> => {
     const response = await renderClient.get(`/ml/predictions?gameweek=${gameweek}&entry_id=${entryId}&model_version=v4.6`);
-    // Handle both direct array and nested predictions structure
-    return response.data?.predictions || response.data || [];
+    return response.data;
+  },
+  getMLPlayers: async (gameweek: number, entryId?: number): Promise<any> => {
+    if (!entryId) {
+      throw new Error('entry_id is required for ML players');
+    }
+    // Use Supabase edge function proxy (consistent with other ML endpoints)
+    const response = await supabaseClient.get(`/ml-players?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&limit=500`, {
+      timeout: 120000 // 2 minute timeout for ML processing
+    });
+    // Backend returns StandardResponse format: { data: { players: [...] }, meta: {...} }
+    const responseData = response.data;
+    if (responseData?.data?.players) {
+      return responseData.data;
+    }
+    // Fallback: if it's already the data object
+    if (responseData?.players) {
+      return responseData;
+    }
+    console.warn('ML players: Unexpected response format', responseData);
+    return { players: [] };
   },
   getRecommendations: async (entryId: number, gameweek: number): Promise<Recommendation[]> => {
     // This is a potentially long-running request (30-60s)
+    console.log('mlApi.getRecommendations: Calling Supabase edge function');
     const response = await supabaseClient.get(`/ml-recommendations?entry_id=${entryId}&gameweek=${gameweek}&max_transfers=4`, {
       timeout: 60000 // Extended timeout
     });
-    // Handle both direct array and nested recommendations structure
-    return response.data?.recommendations || response.data || [];
+    console.log('mlApi.getRecommendations: Response status:', response.status);
+    console.log('mlApi.getRecommendations: Response data:', response.data);
+    
+    // Backend returns StandardResponse format: { data: { recommendations: [...] }, meta: {...} }
+    // Supabase edge function passes it through, so response.data is the StandardResponse
+    const responseData = response.data;
+    console.log('mlApi.getRecommendations: responseData:', responseData);
+    console.log('mlApi.getRecommendations: responseData.data:', responseData?.data);
+    console.log('mlApi.getRecommendations: responseData.data?.recommendations:', responseData?.data?.recommendations);
+    
+    // Extract recommendations from the nested structure
+    if (responseData?.data?.recommendations) {
+      const recs = responseData.data.recommendations;
+      console.log('mlApi.getRecommendations: Found recommendations in data.data.recommendations:', recs?.length, recs);
+      return recs;
+    }
+    // Fallback: if it's already an array (legacy format)
+    if (Array.isArray(responseData)) {
+      console.log('mlApi.getRecommendations: Response is already an array:', responseData.length);
+      return responseData;
+    }
+    // Fallback: if recommendations is at top level
+    if (responseData?.recommendations) {
+      console.log('mlApi.getRecommendations: Found recommendations at top level:', responseData.recommendations?.length);
+      return responseData.recommendations;
+    }
+    // No recommendations found
+    console.warn('ML recommendations: Unexpected response format', responseData);
+    return [];
   }
 };
 
 export const newsApi = {
   getArticles: async (): Promise<NewsArticle[]> => {
     const response = await renderClient.get('/news/articles?limit=50&offset=0');
-    // Handle both direct array and nested articles structure
-    return response.data?.articles || response.data || [];
+    return response.data;
   }
 };
 
 export const imagesApi = {
+  // Get player image from Supabase storage bucket 'fpl-images' at path 'players/{playerId}.png'
+  // Supabase storage public URL format: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
+  // Verified: Images are stored at: players/{playerId}.png in the 'fpl-images' bucket
   getPlayerImageUrl: (playerId: number) => {
-    // Use Supabase storage - images are stored at players/{player_id}.png
-    // Bucket name: fpl-images
-    return `${SUPABASE_URL}/storage/v1/object/public/fpl-images/players/${playerId}.png`;
+    // Supabase get_public_url adds a query parameter, but it's optional for public buckets
+    // We'll use the base URL without query params first
+    const url = `${SUPABASE_URL}/storage/v1/object/public/fpl-images/players/${playerId}.png`;
+    return url;
   },
-  getTeamImageUrl: (teamId: number) => {
-    // Use Supabase storage - team logos are stored at teams/{team_id}.png
-    return `${SUPABASE_URL}/storage/v1/object/public/fpl-images/teams/${teamId}.png`;
+  // Fallback: FPL API photo URL (same format as backend uses)
+  getPlayerImageUrlFPL: (playerId: number) => {
+    const url = `https://resources.fantasy.premierleague.com/drf/element_photos/${playerId}.png`;
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      console.log(`[imagesApi] Generated FPL URL for player ${playerId}:`, url);
+    }
+    return url;
   },
-  // Direct FPL URLs as fallback (if Supabase image doesn't exist)
-  getFPLPlayerImageUrl: (photoCode: string) => {
-    // FPL direct player photo URL
-    // photoCode format: "123456" (string from FPL API)
-    return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png`;
-  },
-  getFPLTeamImageUrl: (teamCode: number) => {
-    // FPL direct team logo URL
-    return `https://resources.premierleague.com/premierleague/badges/t${teamCode}.png`;
-  },
+  getTeamImageUrl: (teamId: number) => `${API_BASE_URL}/images/teams/${teamId}`,
 };

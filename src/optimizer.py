@@ -373,7 +373,9 @@ class TransferOptimizer:
                 continue
             
             sol = self.solve_transfer_optimization(current_squad, available_players, bank, free_transfers, tx)
-            if self._is_scenario_beneficial(sol, min_gain=0.5):
+            # Lower threshold to 0.1 for optional transfers to show more recommendations
+            # This allows marginal improvements to be shown
+            if self._is_scenario_beneficial(sol, min_gain=0.1):
                 sol.update({
                     'strategy': 'OPTIMIZE',
                     'description': f'Optimize squad ({tx} transfer{"s" if tx > 1 else ""})',
@@ -411,5 +413,24 @@ class TransferOptimizer:
         
         # Final sort by net EV gain (descending)
         recommendations.sort(key=lambda x: x['net_ev_gain_adjusted'], reverse=True)
+        
+        # If no recommendations found, try to generate at least one with a very low threshold
+        # This ensures users always see something, even if marginal
+        if not recommendations and free_transfers > 0:
+            logger.info("No recommendations found with standard thresholds, trying with lower threshold...")
+            for tx in range(1, min(max_transfers + 1, 3)):  # Try 1-2 transfers only
+                sol = self.solve_transfer_optimization(current_squad, available_players, bank, free_transfers, tx)
+                if sol.get('status') == 'optimal' and sol.get('net_ev_gain_adjusted', -999) >= -2.0:  # Allow up to -2 points
+                    sol.update({
+                        'strategy': 'OPTIMIZE',
+                        'description': f'Marginal optimization ({tx} transfer{"s" if tx > 1 else ""})',
+                        'priority': 'VERY LOW',
+                        'penalty_hits': max(0, tx-free_transfers),
+                        'transfer_penalty': max(0, tx-free_transfers)*4,
+                        'original_net_gain': sol['net_ev_gain']
+                    })
+                    recommendations.append(sol)
+                    logger.info(f"Found marginal recommendation: {tx} transfer(s) with net gain {sol.get('net_ev_gain_adjusted', 0):.2f}")
+                    break  # Only add one marginal recommendation
         
         return {'recommendations': recommendations, 'num_forced_transfers': num_forced, 'forced_players': forced_out.to_dict('records')}
