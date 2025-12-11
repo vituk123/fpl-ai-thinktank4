@@ -142,12 +142,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions"""
+    import traceback
+    error_traceback = traceback.format_exc()
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    # Include error details for debugging (limit traceback to 2000 chars)
+    error_detail = f"An unexpected error occurred: {str(exc)}"
+    error_detail += f"\nTraceback: {error_traceback[:2000]}"
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "detail": "An unexpected error occurred. Please try again later.",
+            "detail": error_detail,
             "path": str(request.url.path)
         }
     )
