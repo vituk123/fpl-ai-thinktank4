@@ -19,13 +19,19 @@ const Recommendations: React.FC = () => {
       }
       try {
         console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
-        const data = await mlApi.getMLReport(entryId, currentGameweek);
+        // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
+        const data = await mlApi.getMLReport(entryId, currentGameweek, false);
         console.log('ML Report: Received data:', data);
         setReport(data);
         setError(null);
       } catch (e: any) {
         console.error('ML Report: Error fetching:', e);
-        setError(e.message || 'Failed to load ML report');
+        // Check if it's a timeout error
+        if (e.message?.includes('timeout') || e.response?.data?.timeout) {
+          setError('ML report generation timed out. The analysis is computationally intensive. Please try again.');
+        } else {
+          setError(e.message || 'Failed to load ML report');
+        }
         setReport(null);
       } finally {
         setLoading(false);
@@ -51,7 +57,7 @@ const Recommendations: React.FC = () => {
     return (
       <div className="h-[80vh] flex flex-col items-center justify-center">
         <LoadingSpinner text="Generating ML Report..." />
-        <p className="mt-4 font-mono text-xs opacity-60">Running complete analysis pipeline. This may take up to 60s.</p>
+        <p className="mt-4 font-mono text-xs opacity-60">Running complete analysis pipeline. This may take up to 5 minutes.</p>
       </div>
     );
   }
@@ -286,9 +292,9 @@ const Recommendations: React.FC = () => {
               </p>
               {Object.entries(report.chip_recommendation.evaluations).length > 0 && (
                 <ul className="list-disc list-inside space-y-1 text-sm mt-2">
-                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, eval]) => (
+                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
                     <li key={chipName}>
-                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {eval.reason}
+                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
                     </li>
                   ))}
                 </ul>

@@ -206,19 +206,42 @@ export const mlApi = {
     console.warn('ML players: Unexpected response format', responseData);
     return { players: [] };
   },
-  getMLReport: async (entryId: number, gameweek: number, fastMode: boolean = false): Promise<MLReport> => {
-    // Use Supabase edge function proxy (consistent with other ML endpoints)
-    // fastMode=false runs full ML analysis (fixture difficulty, statistical analysis, ML training)
-    const response = await supabaseClient.get(`/ml-report?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&fast_mode=${fastMode}`, {
-      timeout: 300000 // 5 minute timeout for full ML report generation
-    });
-    // Backend returns StandardResponse format: { data: {...}, meta: {...} }
-    const responseData = response.data;
-    if (responseData?.data) {
-      return responseData.data;
+  getMLReport: async (entryId: number, gameweek: number, fastMode: boolean = true): Promise<MLReport> => {
+    // Try GCP directly first for full mode (bypasses Supabase 60s timeout)
+    // For fast mode, use Supabase edge function (faster, stays under timeout)
+    const useDirectGCP = !fastMode; // Use direct GCP for full mode
+    
+    if (useDirectGCP) {
+      // Call GCE VM directly to avoid Supabase timeout for full ML analysis
+      const gceVmUrl = 'http://35.192.15.52';
+      console.log('mlApi.getMLReport: Calling GCE VM directly for full ML report');
+      const response = await axios.get(`${gceVmUrl}/api/v1/ml/report`, {
+        params: {
+          entry_id: entryId,
+          gameweek: gameweek,
+          model_version: 'v4.6',
+          fast_mode: fastMode
+        },
+        timeout: 300000 // 5 minute timeout for full ML report
+      });
+      const responseData = response.data;
+      if (responseData?.data) {
+        return responseData.data;
+      }
+      return responseData;
+    } else {
+      // Use Supabase edge function for fast mode (stays under 60s timeout)
+      const response = await supabaseClient.get(`/ml-report?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&fast_mode=${fastMode}`, {
+        timeout: 60000 // 1 minute timeout for fast mode
+      });
+      // Backend returns StandardResponse format: { data: {...}, meta: {...} }
+      const responseData = response.data;
+      if (responseData?.data) {
+        return responseData.data;
+      }
+      // Fallback: if it's already the data object
+      return responseData;
     }
-    // Fallback: if it's already the data object
-    return responseData;
   },
   getRecommendations: async (entryId: number, gameweek: number): Promise<Recommendation[]> => {
     // This is a potentially long-running request (30-60s)
