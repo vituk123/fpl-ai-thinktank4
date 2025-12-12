@@ -448,11 +448,11 @@ class ReportGenerator:
         
         def to_python_type(value):
             """Convert numpy types to native Python types for JSON serialization"""
-            if isinstance(value, (np.integer, np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)):
+            if isinstance(value, (np.integer, np.int8, np.int16, np.int32, np.int64)):
                 return int(value)
             elif isinstance(value, (np.floating, np.float16, np.float32, np.float64)):
                 return float(value)
-            elif isinstance(value, (np.bool_, np.bool8)):
+            elif isinstance(value, np.bool_):
                 return bool(value)
             elif isinstance(value, np.ndarray):
                 return value.tolist()
