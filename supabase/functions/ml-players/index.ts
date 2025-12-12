@@ -15,9 +15,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const gceVmApiUrl = Deno.env.get('GCE_VM_API_URL')
+    const gcpApiUrl = Deno.env.get('GCP_API_URL')
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
-    if (!renderApiUrl) {
-      throw new Error('RENDER_API_URL environment variable not set')
+    console.log('ml-players: GCE_VM_API_URL:', gceVmApiUrl ? 'SET' : 'NOT SET')
+    console.log('ml-players: GCP_API_URL:', gcpApiUrl ? 'SET' : 'NOT SET')
+    console.log('ml-players: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
+    
+    if (!gceVmApiUrl && !gcpApiUrl && !renderApiUrl) {
+      throw new Error('No backend API URLs are set')
     }
 
     const url = new URL(req.url)
@@ -33,7 +39,7 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Build query params for Render API
+    // Build query params for backend API
     const params = new URLSearchParams({
       entry_id: entryId,
       model_version: modelVersion,
@@ -41,14 +47,17 @@ Deno.serve(async (req: Request) => {
     })
     if (gameweek) params.append('gameweek', gameweek)
 
-    // Forward request to Render FastAPI
-    const renderUrl = `${renderApiUrl}/api/v1/ml/players?${params.toString()}`
+    // Priority: GCE VM → GCP Cloud Run → Render
+    let apiUrl = gceVmApiUrl || gcpApiUrl || renderApiUrl
+    let backendName = gceVmApiUrl ? 'GCE VM' : (gcpApiUrl ? 'GCP' : 'Render')
+    const backendUrl = `${apiUrl}/api/v1/ml/players?${params.toString()}`
+    console.log('ml-players: Calling backend URL:', backendUrl.replace(apiUrl, `[${backendName}_URL]`))
     
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout for ML
 
     try {
-      const response = await fetch(renderUrl, {
+      const response = await fetch(backendUrl, {
         method: req.method,
         headers: {
           'Content-Type': 'application/json',
@@ -60,7 +69,81 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`Render API error ${response.status}:`, errorText.substring(0, 1000))
+        console.error(`${backendName} API error ${response.status}:`, errorText.substring(0, 1000))
+        
+        // Try fallback backends in priority order
+        if (apiUrl === gceVmApiUrl && (gcpApiUrl || renderApiUrl)) {
+          const fallbackUrl = gcpApiUrl 
+            ? `${gcpApiUrl}/api/v1/ml/players?${params.toString()}`
+            : `${renderApiUrl}/api/v1/ml/players?${params.toString()}`
+          const fallbackName = gcpApiUrl ? 'GCP' : 'Render'
+          console.log(`ml-players: ${backendName} failed, trying ${fallbackName} fallback...`)
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 120000)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log(`ml-players: ${fallbackName} fallback succeeded`)
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error(`ml-players: ${fallbackName} fallback also failed:`, fallbackError)
+          }
+        } else if (apiUrl === gcpApiUrl && renderApiUrl) {
+          console.log('ml-players: GCP failed, trying Render fallback...')
+          const fallbackUrl = `${renderApiUrl}/api/v1/ml/players?${params.toString()}`
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 120000)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log('ml-players: Render fallback succeeded')
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error('ml-players: Render fallback also failed:', fallbackError)
+          }
+        }
         
         let parsedError: any = null
         try {
@@ -69,15 +152,17 @@ Deno.serve(async (req: Request) => {
           // If not JSON, use the text as-is
         }
         
-        const renderErrorMessage = parsedError?.detail || parsedError?.error || parsedError?.message || errorText
+        const backendErrorMessage = parsedError?.detail || parsedError?.error || parsedError?.message || errorText
         
-        const errorWithDetails = new Error(`Render API error: ${response.status}`)
-        ;(errorWithDetails as any).renderError = {
+        const errorWithDetails = new Error(`${backendName} API error: ${response.status}`)
+        ;(errorWithDetails as any).backendError = {
           status: response.status,
           fullErrorText: errorText,
           parsedError: parsedError,
-          errorMessage: renderErrorMessage,
+          errorMessage: backendErrorMessage,
+          backend: backendName,
         }
+        ;(errorWithDetails as any).renderError = (errorWithDetails as any).backendError // Backward compatibility
         
         throw errorWithDetails
       }
@@ -121,22 +206,23 @@ Deno.serve(async (req: Request) => {
     let renderErrorDetails: any = null
     
     if (error instanceof Error) {
-      if ((error as any).renderError) {
-        renderErrorDetails = (error as any).renderError
+      if ((error as any).backendError || (error as any).renderError) {
+        renderErrorDetails = (error as any).backendError || (error as any).renderError
         errorMessage = renderErrorDetails.errorMessage || renderErrorDetails.detail || renderErrorDetails.error || error.message
         statusCode = 502
         fullError = {
           status: renderErrorDetails.status,
           fullErrorText: renderErrorDetails.fullErrorText,
-          parsedError: renderErrorDetails.parsedError
+          parsedError: renderErrorDetails.parsedError,
+          backend: renderErrorDetails.backend || 'Unknown'
         }
-      } else if (error.message.includes('RENDER_API_URL')) {
-        errorMessage = 'ML service configuration error: RENDER_API_URL not set in Supabase environment variables'
+      } else if (error.message.includes('GCE_VM_API_URL') || error.message.includes('GCP_API_URL') || error.message.includes('RENDER_API_URL')) {
+        errorMessage = 'ML service configuration error: No backend API URLs are set in Supabase environment variables'
         statusCode = 503
       } else if (error.message.includes('timeout')) {
         errorMessage = 'ML service timeout: The request took too long. Please try again.'
         statusCode = 504
-      } else if (error.message.includes('Render API error')) {
+      } else if (error.message.includes('API error')) {
         errorMessage = `ML backend error: ${error.message}`
         statusCode = 502
       } else {
@@ -150,7 +236,7 @@ Deno.serve(async (req: Request) => {
         message: error instanceof Error ? error.message : String(error),
         fullError: fullError,
         renderError: renderErrorDetails,
-        details: 'Check Supabase Edge Function logs and ensure RENDER_API_URL is configured'
+        details: 'Check Supabase Edge Function logs and ensure GCE_VM_API_URL, GCP_API_URL, or RENDER_API_URL is configured'
       }),
       { 
         status: statusCode,

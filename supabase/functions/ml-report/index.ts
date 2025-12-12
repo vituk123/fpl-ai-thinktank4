@@ -3,33 +3,38 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS
+  // CORS headers helper
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
+  
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    })
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
+    const gceVmApiUrl = Deno.env.get('GCE_VM_API_URL')
+    const gcpApiUrl = Deno.env.get('GCP_API_URL')
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
+    console.log('ml-report: GCE_VM_API_URL:', gceVmApiUrl ? 'SET' : 'NOT SET')
+    console.log('ml-report: GCP_API_URL:', gcpApiUrl ? 'SET' : 'NOT SET')
     console.log('ml-report: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
     
-    if (!renderApiUrl) {
-      console.error('ml-report: RENDER_API_URL environment variable not set')
+    if (!gceVmApiUrl && !gcpApiUrl && !renderApiUrl) {
+      console.error('ml-report: No backend API URLs are set')
       return new Response(
         JSON.stringify({ 
-          error: 'ML service configuration error: RENDER_API_URL not set in Supabase environment variables',
-          details: 'Please set RENDER_API_URL secret in Supabase'
+          error: 'ML service configuration error: No backend API URLs are set',
+          details: 'Please set GCE_VM_API_URL, GCP_API_URL, or RENDER_API_URL secret in Supabase'
         }),
         { 
           status: 503, 
           headers: { 
-            'Content-Type': 'application/json', 
-            'Access-Control-Allow-Origin': '*' 
+            'Content-Type': 'application/json',
+            ...corsHeaders
           } 
         }
       )
@@ -39,33 +44,42 @@ Deno.serve(async (req: Request) => {
     const entryId = url.searchParams.get('entry_id')
     const gameweek = url.searchParams.get('gameweek')
     const modelVersion = url.searchParams.get('model_version') || 'v4.6'
+    const fastMode = url.searchParams.get('fast_mode') === 'true' // Read fast_mode param
 
-    console.log('ml-report: Request params:', { entryId, gameweek, modelVersion })
+    console.log('ml-report: Request params:', { entryId, gameweek, modelVersion, fastMode })
 
     if (!entryId) {
       return new Response(
         JSON.stringify({ error: 'entry_id is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       )
     }
 
-    // Build query params for Render API
+    // Build query params for backend API
     const params = new URLSearchParams({
       entry_id: entryId,
       model_version: modelVersion,
+      fast_mode: String(fastMode), // Pass fast_mode to backend
     })
     if (gameweek) params.append('gameweek', gameweek)
 
-    // Forward request to Render FastAPI
-    const renderUrl = `${renderApiUrl}/api/v1/ml/report?${params.toString()}`
-    console.log('ml-report: Calling Render URL:', renderUrl.replace(renderApiUrl, '[RENDER_URL]'))
+    // Priority: GCE VM → GCP Cloud Run → Render
+    let apiUrl = gceVmApiUrl || gcpApiUrl || renderApiUrl
+    let backendName = gceVmApiUrl ? 'GCE VM' : (gcpApiUrl ? 'GCP' : 'Render')
+    const backendUrl = `${apiUrl}/api/v1/ml/report?${params.toString()}`
+    console.log('ml-report: Calling backend URL:', backendUrl.replace(apiUrl, `[${backendName}_URL]`))
     
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout for ML report generation
+    // Supabase edge functions have a max timeout (typically 60s free, 300s paid)
+    // Use shorter timeout for free tier, longer for paid
+    // For fast_mode, use 60s; for full mode, use 240s (but Supabase free tier will timeout at 60s)
+    // Note: Supabase free tier has 60s hard limit, so full mode will timeout
+    const timeoutDuration = fastMode ? 55000 : 55000; // Use 55s for both to stay under Supabase 60s limit
+    const timeoutId = setTimeout(() => controller.abort(), timeoutDuration)
 
     try {
-      console.log('ml-report: Starting fetch to Render...')
-      const response = await fetch(renderUrl, {
+      console.log(`ml-report: Starting fetch to ${backendName}...`)
+      const response = await fetch(backendUrl, {
         method: req.method,
         headers: {
           'Content-Type': 'application/json',
@@ -73,13 +87,89 @@ Deno.serve(async (req: Request) => {
         signal: controller.signal,
       })
 
-      console.log('ml-report: Render response status:', response.status)
+      console.log(`ml-report: ${backendName} response status:`, response.status)
 
       clearTimeout(timeoutId)
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`Render API error ${response.status}:`, errorText.substring(0, 1000))
+        console.error(`${backendName} API error ${response.status}:`, errorText.substring(0, 1000))
+        
+        // Try fallback backends in priority order
+        if (apiUrl === gceVmApiUrl && (gcpApiUrl || renderApiUrl)) {
+          // GCE VM failed, try GCP or Render
+          const fallbackUrl = gcpApiUrl 
+            ? `${gcpApiUrl}/api/v1/ml/report?${params.toString()}`
+            : `${renderApiUrl}/api/v1/ml/report?${params.toString()}`
+          const fallbackName = gcpApiUrl ? 'GCP' : 'Render'
+          console.log(`ml-report: ${backendName} failed, trying ${fallbackName} fallback...`)
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeoutDuration)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log(`ml-report: ${fallbackName} fallback succeeded`)
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...corsHeaders,
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error(`ml-report: ${fallbackName} fallback also failed:`, fallbackError)
+          }
+        } else if (apiUrl === gcpApiUrl && renderApiUrl) {
+          // GCP failed, try Render
+          console.log('ml-report: GCP failed, trying Render fallback...')
+          const fallbackUrl = `${renderApiUrl}/api/v1/ml/report?${params.toString()}`
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), timeoutDuration)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log('ml-report: Render fallback succeeded')
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...corsHeaders,
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error('ml-report: Render fallback also failed:', fallbackError)
+          }
+        }
         
         let parsedError: any = null
         try {
@@ -88,21 +178,29 @@ Deno.serve(async (req: Request) => {
           // If not JSON, use the text as-is
         }
         
-        const renderErrorMessage = parsedError?.detail || parsedError?.error || parsedError?.message || errorText
+        // Extract error message - try detail first, then error, then message, then full text
+        const backendErrorMessage = parsedError?.detail || parsedError?.error || parsedError?.message || errorText.substring(0, 500)
         
-        const errorWithDetails = new Error(`Render API error: ${response.status}`)
-        ;(errorWithDetails as any).renderError = {
+        // Create error object with backendError property
+        const backendErrorDetails = {
           status: response.status,
-          fullErrorText: errorText,
+          fullErrorText: errorText.substring(0, 3000),
           parsedError: parsedError,
-          errorMessage: renderErrorMessage,
+          errorMessage: backendErrorMessage,
+          detail: parsedError?.detail,
+          backend: backendName,
         }
+        
+        // Throw error that will be caught by outer catch
+        const errorWithDetails: any = new Error(`${backendName} API error: ${response.status} - ${backendErrorMessage}`)
+        errorWithDetails.backendError = backendErrorDetails
+        errorWithDetails.renderError = backendErrorDetails // Keep for backward compatibility
         
         throw errorWithDetails
       }
 
       const data = await response.json()
-      console.log('ml-report: Render response received, data keys:', Object.keys(data))
+      console.log(`ml-report: ${backendName} response received, data keys:`, Object.keys(data))
 
       return new Response(
         JSON.stringify(data),
@@ -110,7 +208,7 @@ Deno.serve(async (req: Request) => {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            ...corsHeaders,
           },
         }
       )
@@ -123,7 +221,22 @@ Deno.serve(async (req: Request) => {
       })
       
       if (fetchError.name === 'AbortError' || fetchError.message?.includes('aborted')) {
-        throw new Error('Request timeout - ML report generation took too long (exceeded 2 minute limit)')
+        // Return timeout error with CORS headers
+        return new Response(
+          JSON.stringify({ 
+            error: 'ML report generation timeout',
+            message: `The ML report generation took too long (exceeded ${timeoutDuration / 1000} second limit). The analysis is computationally intensive. Please try again with fast_mode=true or contact support.`,
+            timeout: true,
+            timeoutDuration: timeoutDuration / 1000
+          }),
+          { 
+            status: 504,
+            headers: { 
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            }
+          }
+        )
       }
       
       if (fetchError instanceof Error) {
@@ -132,31 +245,40 @@ Deno.serve(async (req: Request) => {
       throw fetchError
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in ml-report proxy:', error)
+    console.error('Error renderError property:', error?.renderError)
     
     let errorMessage = 'Failed to fetch ML report'
     let statusCode = 500
     let fullError: any = null
     let renderErrorDetails: any = null
     
-    if (error instanceof Error) {
-      if ((error as any).renderError) {
-        renderErrorDetails = (error as any).renderError
-        errorMessage = renderErrorDetails.errorMessage || renderErrorDetails.detail || renderErrorDetails.error || error.message
-        statusCode = 502
-        fullError = {
-          status: renderErrorDetails.status,
-          fullErrorText: renderErrorDetails.fullErrorText,
-          parsedError: renderErrorDetails.parsedError
-        }
-      } else if (error.message.includes('RENDER_API_URL')) {
-        errorMessage = 'ML service configuration error: RENDER_API_URL not set in Supabase environment variables'
+    // Check for backendError property (from GCP/Render API errors)
+    if (error?.backendError || error?.renderError) {
+      renderErrorDetails = error.backendError || error.renderError
+      // Prefer detail field (from FastAPI HTTPException) over errorMessage
+      errorMessage = renderErrorDetails.detail || renderErrorDetails.errorMessage || renderErrorDetails.error || error.message
+      statusCode = 502
+      fullError = {
+        status: renderErrorDetails.status,
+        fullErrorText: renderErrorDetails.fullErrorText?.substring(0, 2000),
+        parsedError: renderErrorDetails.parsedError,
+        detail: renderErrorDetails.detail,
+        backend: renderErrorDetails.backend || 'Unknown'
+      }
+      // Include the full error text in the response for debugging (if detail doesn't have traceback)
+      if (renderErrorDetails.fullErrorText && !errorMessage.includes('Traceback')) {
+        errorMessage = renderErrorDetails.fullErrorText.substring(0, 2000)
+      }
+    } else if (error instanceof Error) {
+      if (error.message.includes('GCE_VM_API_URL') || error.message.includes('GCP_API_URL') || error.message.includes('RENDER_API_URL')) {
+        errorMessage = 'ML service configuration error: No backend API URLs are set in Supabase environment variables'
         statusCode = 503
       } else if (error.message.includes('timeout')) {
         errorMessage = 'ML service timeout: The request took too long. Please try again.'
         statusCode = 504
-      } else if (error.message.includes('Render API error')) {
+      } else if (error.message.includes('API error')) {
         errorMessage = `ML backend error: ${error.message}`
         statusCode = 502
       } else {
@@ -170,13 +292,13 @@ Deno.serve(async (req: Request) => {
         message: error instanceof Error ? error.message : String(error),
         fullError: fullError,
         renderError: renderErrorDetails,
-        details: 'Check Supabase Edge Function logs and ensure RENDER_API_URL is configured'
+        details: 'Check Supabase Edge Function logs and ensure GCE_VM_API_URL, GCP_API_URL, or RENDER_API_URL is configured'
       }),
       { 
         status: statusCode,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders,
         }
       }
     )

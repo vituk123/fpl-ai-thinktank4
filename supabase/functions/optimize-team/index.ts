@@ -15,9 +15,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const gceVmApiUrl = Deno.env.get('GCE_VM_API_URL')
+    const gcpApiUrl = Deno.env.get('GCP_API_URL')
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
-    if (!renderApiUrl) {
-      throw new Error('RENDER_API_URL environment variable not set')
+    console.log('optimize-team: GCE_VM_API_URL:', gceVmApiUrl ? 'SET' : 'NOT SET')
+    console.log('optimize-team: GCP_API_URL:', gcpApiUrl ? 'SET' : 'NOT SET')
+    console.log('optimize-team: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
+    
+    if (!gceVmApiUrl && !gcpApiUrl && !renderApiUrl) {
+      throw new Error('No backend API URLs are set')
     }
 
     const url = new URL(req.url)
@@ -32,21 +38,24 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Build query params for Render API
+    // Build query params for backend API
     const params = new URLSearchParams({
       entry_id: entryId,
       max_transfers: maxTransfers,
     })
     if (gameweek) params.append('gameweek', gameweek)
 
-    // Forward request to Render FastAPI
-    const renderUrl = `${renderApiUrl}/api/v1/optimize/team?${params.toString()}`
+    // Priority: GCE VM → GCP Cloud Run → Render
+    let apiUrl = gceVmApiUrl || gcpApiUrl || renderApiUrl
+    let backendName = gceVmApiUrl ? 'GCE VM' : (gcpApiUrl ? 'GCP' : 'Render')
+    const backendUrl = `${apiUrl}/api/v1/optimize/team?${params.toString()}`
+    console.log('optimize-team: Calling backend URL:', backendUrl.replace(apiUrl, `[${backendName}_URL]`))
     
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minute timeout for ML
 
     try {
-      const response = await fetch(renderUrl, {
+      const response = await fetch(backendUrl, {
         method: req.method,
         headers: {
           'Content-Type': 'application/json',
@@ -58,7 +67,82 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(`Render API error: ${response.status} - ${errorText}`)
+        
+        // Try fallback backends in priority order
+        if (apiUrl === gceVmApiUrl && (gcpApiUrl || renderApiUrl)) {
+          const fallbackUrl = gcpApiUrl 
+            ? `${gcpApiUrl}/api/v1/optimize/team?${params.toString()}`
+            : `${renderApiUrl}/api/v1/optimize/team?${params.toString()}`
+          const fallbackName = gcpApiUrl ? 'GCP' : 'Render'
+          console.log(`optimize-team: ${backendName} failed, trying ${fallbackName} fallback...`)
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 120000)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log(`optimize-team: ${fallbackName} fallback succeeded`)
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error(`optimize-team: ${fallbackName} fallback also failed:`, fallbackError)
+          }
+        } else if (apiUrl === gcpApiUrl && renderApiUrl) {
+          console.log('optimize-team: GCP failed, trying Render fallback...')
+          const fallbackUrl = `${renderApiUrl}/api/v1/optimize/team?${params.toString()}`
+          
+          const fallbackController = new AbortController()
+          const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 120000)
+          
+          try {
+            const fallbackResponse = await fetch(fallbackUrl, {
+              method: req.method,
+              headers: { 'Content-Type': 'application/json' },
+              signal: fallbackController.signal,
+            })
+            
+            clearTimeout(fallbackTimeoutId)
+            
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json()
+              console.log('optimize-team: Render fallback succeeded')
+              return new Response(
+                JSON.stringify(fallbackData),
+                {
+                  status: 200,
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                  },
+                }
+              )
+            }
+          } catch (fallbackError) {
+            clearTimeout(fallbackTimeoutId)
+            console.error('optimize-team: Render fallback also failed:', fallbackError)
+          }
+        }
+        
+        throw new Error(`${backendName} API error: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
