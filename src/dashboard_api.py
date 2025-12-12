@@ -724,6 +724,36 @@ async def get_transfer_recommendations(
             if 'EV' not in players_df.columns:
                 players_df['EV'] = players_df.get('ep_next', 0)
         
+        # Ensure 'EV' column exists in players_df
+        if 'EV' not in players_df.columns:
+            players_df['EV'] = players_df.get('ep_next', 0)
+            if players_df['EV'].isna().any():
+                players_df['EV'] = players_df['EV'].fillna(0)
+        
+        # Merge EV and other calculated columns from players_df into current_squad_df
+        # This ensures current_squad_df has all the ML-enhanced data
+        ev_columns = ['EV', 'predicted_ev', 'xP_raw', 'xP_adjusted', 'ep_next']
+        merge_columns = ['id'] + [col for col in ev_columns if col in players_df.columns]
+        
+        if merge_columns:
+            current_squad_df = current_squad_df.merge(
+                players_df[merge_columns],
+                on='id',
+                how='left',
+                suffixes=('', '_new')
+            )
+            # If EV column doesn't exist after merge, create it from ep_next or set to 0
+            if 'EV' not in current_squad_df.columns:
+                current_squad_df['EV'] = current_squad_df.get('ep_next', 0)
+                if current_squad_df['EV'].isna().any():
+                    current_squad_df['EV'] = current_squad_df['EV'].fillna(0)
+        else:
+            # Fallback if no merge columns, ensure EV exists
+            if 'EV' not in current_squad_df.columns:
+                current_squad_df['EV'] = current_squad_df.get('ep_next', 0)
+                if current_squad_df['EV'].isna().any():
+                    current_squad_df['EV'] = current_squad_df['EV'].fillna(0)
+        
         # Identify forced transfers
         forced_ids = set()
         if forced_out_ids:
