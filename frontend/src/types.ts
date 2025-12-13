@@ -93,12 +93,24 @@ export interface MLReport {
       num_transfers: number;
       net_ev_gain: number;
       players_out: Array<{
+        id: number | null;
         name: string;
         team: string;
+        form: number | null;
+        ev: number;
+        ownership: number | null;
+        points_per_game: number | null;
+        fixture_difficulty: number | null;
       }>;
       players_in: Array<{
+        id: number | null;
         name: string;
         team: string;
+        form: number | null;
+        ev: number;
+        ownership: number | null;
+        points_per_game: number | null;
+        fixture_difficulty: number | null;
       }>;
     } | null;
   };

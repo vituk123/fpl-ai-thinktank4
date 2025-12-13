@@ -517,8 +517,105 @@ class ReportGenerator:
         
         if recommendations and len(recommendations) > 0:
             rec = recommendations[0]
-            out_players = [{"name": str(to_python_type(p.get('name', ''))), "team": str(to_python_type(p.get('team', 'Unknown')))} for p in rec.get('players_out', [])]
-            in_players = [{"name": str(to_python_type(p.get('name', ''))), "team": str(to_python_type(p.get('team', 'Unknown')))} for p in rec.get('players_in', [])]
+            
+            # Helper function to get player stats from players_df
+            def get_player_stats(player_dict):
+                """Extract player stats from players_df using player ID."""
+                player_id = player_dict.get('id')
+                if not player_id or players_df.empty:
+                    # Fallback to basic info if ID not available
+                    return {
+                        "id": None,
+                        "name": str(to_python_type(player_dict.get('name', ''))),
+                        "team": str(to_python_type(player_dict.get('team', 'Unknown'))),
+                        "form": None,
+                        "ev": to_python_type(player_dict.get('EV', 0)),
+                        "ownership": None,
+                        "points_per_game": None,
+                        "fixture_difficulty": None
+                    }
+                
+                # Look up player in players_df
+                player_row = players_df[players_df['id'] == player_id]
+                if player_row.empty:
+                    # Fallback if player not found
+                    return {
+                        "id": to_python_type(player_id),
+                        "name": str(to_python_type(player_dict.get('name', ''))),
+                        "team": str(to_python_type(player_dict.get('team', 'Unknown'))),
+                        "form": None,
+                        "ev": to_python_type(player_dict.get('EV', 0)),
+                        "ownership": None,
+                        "points_per_game": None,
+                        "fixture_difficulty": None
+                    }
+                
+                row = player_row.iloc[0]
+                
+                # Get form (from FPL API)
+                form = row.get('form')
+                if pd.isna(form) or form == '':
+                    form = None
+                else:
+                    try:
+                        form = float(to_python_type(form))
+                    except:
+                        form = None
+                
+                # Get ownership (selected_by_percent)
+                ownership = row.get('selected_by_percent')
+                if pd.isna(ownership) or ownership == '':
+                    ownership = None
+                else:
+                    try:
+                        ownership = float(to_python_type(ownership))
+                    except:
+                        ownership = None
+                
+                # Calculate points per game
+                points_per_game = None
+                total_points = row.get('total_points', 0)
+                minutes = row.get('minutes', 0)
+                if not pd.isna(total_points) and not pd.isna(minutes) and minutes > 0:
+                    try:
+                        points_per_game = float(to_python_type(total_points)) / float(to_python_type(minutes)) * 90
+                    except:
+                        points_per_game = None
+                elif 'points_per_game' in row and not pd.isna(row['points_per_game']):
+                    try:
+                        points_per_game = float(to_python_type(row['points_per_game']))
+                    except:
+                        points_per_game = None
+                
+                # Get fixture difficulty (prefer fdr_3gw, fallback to fdr_next or fixture_difficulty)
+                fixture_difficulty = None
+                for fdr_col in ['fdr_3gw', 'fdr_next', 'fixture_difficulty', 'fdr_custom']:
+                    if fdr_col in row and not pd.isna(row[fdr_col]):
+                        try:
+                            fixture_difficulty = float(to_python_type(row[fdr_col]))
+                            break
+                        except:
+                            continue
+                
+                # Get EV (from recommendation or players_df)
+                ev = to_python_type(player_dict.get('EV', row.get('EV', 0)))
+                if pd.isna(ev):
+                    ev = 0
+                
+                return {
+                    "id": to_python_type(player_id),
+                    "name": str(to_python_type(row.get('web_name', player_dict.get('name', '')))),
+                    "team": str(to_python_type(row.get('team_name', player_dict.get('team', 'Unknown')))),
+                    "form": form,
+                    "ev": ev,
+                    "ownership": ownership,
+                    "points_per_game": points_per_game,
+                    "fixture_difficulty": fixture_difficulty
+                }
+            
+            # Build enhanced player lists with stats
+            out_players = [get_player_stats(p) for p in rec.get('players_out', [])]
+            in_players = [get_player_stats(p) for p in rec.get('players_in', [])]
             
             transfer_recommendations["top_suggestion"] = {
                 "num_transfers": to_python_type(rec.get('num_transfers', 0)),

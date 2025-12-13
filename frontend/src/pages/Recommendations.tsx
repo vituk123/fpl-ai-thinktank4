@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import DesktopWindow from '../components/retroui/DesktopWindow';
 import { useAppContext } from '../context/AppContext';
-import { mlApi } from '../services/api';
+import { mlApi, imagesApi } from '../services/api';
 import { MLReport } from '../types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
@@ -19,11 +19,19 @@ const Recommendations: React.FC = () => {
       }
       try {
         console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
+        // Always pass undefined so backend uses its own current gameweek logic (latest played gameweek)
+        // The ML system correctly determines the latest played gameweek based on data availability
         // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
-        const data = await mlApi.getMLReport(entryId, currentGameweek, false);
+        const data = await mlApi.getMLReport(entryId, undefined, false);
         console.log('ML Report: Received data:', data);
         setReport(data);
         setError(null);
+        
+        // Update currentGameweek from the ML report response (this is the actual gameweek analyzed)
+        if (data?.header?.gameweek) {
+          console.log('ML Report: Updating currentGameweek from report:', data.header.gameweek);
+          // Note: We can't directly update context here, but the report will display the correct gameweek
+        }
       } catch (e: any) {
         console.error('ML Report: Error fetching:', e);
         // Check if it's a timeout error
@@ -128,67 +136,6 @@ const Recommendations: React.FC = () => {
             )}
           </div>
 
-          {/* Fixture Analysis Insights */}
-          {(report.fixture_insights.best_fixture_runs.length > 0 || 
-            report.fixture_insights.dgw_alerts.length > 0 || 
-            report.fixture_insights.bgw_alerts.length > 0) && (
-            <div>
-              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Fixture Analysis Insights</h2>
-              
-              {report.fixture_insights.best_fixture_runs.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold uppercase mb-2">Best Fixture Runs (Next 3 GWs)</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-2 border-retro-primary">
-                      <thead className="bg-retro-background">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-bold">Player</th>
-                          <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
-                          <th className="px-3 py-2 text-center text-xs font-bold">Avg FDR</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {report.fixture_insights.best_fixture_runs.map((run, idx) => (
-                          <tr key={idx} className="border-b border-retro-primary">
-                            <td className="px-3 py-2 text-sm">{run.player}</td>
-                            <td className="px-3 py-2 text-center text-xs">{run.team}</td>
-                            <td className="px-3 py-2 text-center text-xs font-mono">{run.avg_fdr.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {report.fixture_insights.dgw_alerts.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold uppercase mb-2">Double Gameweek Alerts</h3>
-                  <p className="text-sm mb-2">Teams with potential DGW:</p>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    {report.fixture_insights.dgw_alerts.map((alert, idx) => (
-                      <li key={idx}>
-                        <strong>{alert.team}</strong>: {Math.round(alert.probability * 100)}% probability
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {report.fixture_insights.bgw_alerts.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="text-sm font-bold uppercase mb-2">Blank Gameweek Alerts</h3>
-                  <p className="text-sm mb-2">Teams likely to blank:</p>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    {report.fixture_insights.bgw_alerts.map((alert, idx) => (
-                      <li key={idx}><strong>{alert.team}</strong></li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Transfer Recommendations */}
           <div>
             <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Transfer Recommendations</h2>
@@ -210,6 +157,165 @@ const Recommendations: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Transfer In vs Transfer Out Comparison */}
+          {report.transfer_recommendations.top_suggestion && 
+           report.transfer_recommendations.top_suggestion.players_out.length > 0 &&
+           report.transfer_recommendations.top_suggestion.players_in.length > 0 && (
+            <div>
+              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Transfer Comparison</h2>
+              <div className="space-y-6">
+                {report.transfer_recommendations.top_suggestion.players_out.map((playerOut, idx) => {
+                  const playerIn = report.transfer_recommendations.top_suggestion!.players_in[idx] || report.transfer_recommendations.top_suggestion!.players_in[0];
+                  
+                  // Helper function to format stat value
+                  const formatStat = (value: number | null, type: 'form' | 'ev' | 'ownership' | 'ppg' | 'fdr') => {
+                    if (value === null || value === undefined) return 'N/A';
+                    switch (type) {
+                      case 'form':
+                      case 'ppg':
+                        return value.toFixed(1);
+                      case 'ev':
+                        return value.toFixed(2);
+                      case 'ownership':
+                        return `${value.toFixed(1)}%`;
+                      case 'fdr':
+                        return value.toFixed(1);
+                      default:
+                        return String(value);
+                    }
+                  };
+                  
+                  // Helper function to determine if transfer in is better
+                  const isBetter = (outVal: number | null, inVal: number | null, higherIsBetter: boolean = true) => {
+                    if (outVal === null || inVal === null) return false;
+                    return higherIsBetter ? inVal > outVal : inVal < outVal;
+                  };
+                  
+                  return (
+                    <div key={idx} className="bg-retro-background p-4 border-2 border-retro-primary">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Transfer Out */}
+                        <div className="border-2 border-retro-primary p-4">
+                          <div className="flex items-center mb-3">
+                            <img
+                              src={playerOut.id ? imagesApi.getPlayerImageUrl(playerOut.id) : imagesApi.getPlayerImageUrlFPL(0)}
+                              alt={playerOut.name}
+                              className="w-16 h-16 object-cover object-top mr-3 border-2 border-retro-primary"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (playerOut.id) {
+                                  img.src = imagesApi.getPlayerImageUrlFPL(playerOut.id);
+                                }
+                              }}
+                            />
+                            <div>
+                              <h3 className="font-bold text-lg">{playerOut.name}</h3>
+                              <p className="text-sm opacity-80">{playerOut.team}</p>
+                              <p className="text-xs opacity-60 mt-1">TRANSFER OUT</p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2 mt-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Form:</span>
+                              <span className="font-mono">{formatStat(playerOut.form, 'form')}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">EV:</span>
+                              <span className="font-mono">{formatStat(playerOut.ev, 'ev')}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Ownership:</span>
+                              <span className="font-mono">{formatStat(playerOut.ownership, 'ownership')}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Points/G:</span>
+                              <span className="font-mono">{formatStat(playerOut.points_per_game, 'ppg')}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">FDR:</span>
+                              <span className="font-mono">{formatStat(playerOut.fixture_difficulty, 'fdr')}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Transfer In */}
+                        <div className="border-2 border-retro-primary p-4 bg-retro-primary bg-opacity-10">
+                          <div className="flex items-center mb-3">
+                            <img
+                              src={playerIn.id ? imagesApi.getPlayerImageUrl(playerIn.id) : imagesApi.getPlayerImageUrlFPL(0)}
+                              alt={playerIn.name}
+                              className="w-16 h-16 object-cover object-top mr-3 border-2 border-retro-primary"
+                              onError={(e) => {
+                                const img = e.target as HTMLImageElement;
+                                if (playerIn.id) {
+                                  img.src = imagesApi.getPlayerImageUrlFPL(playerIn.id);
+                                }
+                              }}
+                            />
+                            <div>
+                              <h3 className="font-bold text-lg">{playerIn.name}</h3>
+                              <p className="text-sm opacity-80">{playerIn.team}</p>
+                              <p className="text-xs opacity-60 mt-1">TRANSFER IN</p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2 mt-4">
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Form:</span>
+                              <span className="font-mono">
+                                {formatStat(playerIn.form, 'form')}
+                                {isBetter(playerOut.form, playerIn.form) && (
+                                  <span className="ml-2 text-green-600">↑</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">EV:</span>
+                              <span className="font-mono">
+                                {formatStat(playerIn.ev, 'ev')}
+                                {isBetter(playerOut.ev, playerIn.ev) && (
+                                  <span className="ml-2 text-green-600">↑</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Ownership:</span>
+                              <span className="font-mono">
+                                {formatStat(playerIn.ownership, 'ownership')}
+                                {isBetter(playerOut.ownership, playerIn.ownership) && (
+                                  <span className="ml-2 text-green-600">↑</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">Points/G:</span>
+                              <span className="font-mono">
+                                {formatStat(playerIn.points_per_game, 'ppg')}
+                                {isBetter(playerOut.points_per_game, playerIn.points_per_game) && (
+                                  <span className="ml-2 text-green-600">↑</span>
+                                )}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="font-bold">FDR:</span>
+                              <span className="font-mono">
+                                {formatStat(playerIn.fixture_difficulty, 'fdr')}
+                                {isBetter(playerOut.fixture_difficulty, playerIn.fixture_difficulty, false) && (
+                                  <span className="ml-2 text-green-600">↑</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Updated Squad After Transfers */}
           {report.transfer_recommendations.top_suggestion && 
@@ -278,6 +384,52 @@ const Recommendations: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fixture Analysis Insights */}
+          {(report.fixture_insights.best_fixture_runs.length > 0 || 
+            report.fixture_insights.bgw_alerts.length > 0) && (
+            <div>
+              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Fixture Analysis Insights</h2>
+              
+              {report.fixture_insights.best_fixture_runs.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold uppercase mb-2">Best Fixture Runs (Next 3 GWs)</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-2 border-retro-primary">
+                      <thead className="bg-retro-background">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-bold">Player</th>
+                          <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
+                          <th className="px-3 py-2 text-center text-xs font-bold">Avg FDR</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.fixture_insights.best_fixture_runs.map((run, idx) => (
+                          <tr key={idx} className="border-b border-retro-primary">
+                            <td className="px-3 py-2 text-sm">{run.player}</td>
+                            <td className="px-3 py-2 text-center text-xs">{run.team}</td>
+                            <td className="px-3 py-2 text-center text-xs font-mono">{run.avg_fdr.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {report.fixture_insights.bgw_alerts.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-bold uppercase mb-2">Blank Gameweek Alerts</h3>
+                  <p className="text-sm mb-2">Teams likely to blank:</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    {report.fixture_insights.bgw_alerts.map((alert, idx) => (
+                      <li key={idx}><strong>{alert.team}</strong></li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
