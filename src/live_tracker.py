@@ -1038,16 +1038,45 @@ class LiveGameweekTracker:
                 # Determine status
                 player_fixture = next((f for f in gw_fixtures if f.get('team_h') == team_id or f.get('team_a') == team_id), None)
                 
+                # Check if fixture is currently in play (started but not finished)
+                fixture_in_play = False
+                if player_fixture:
+                    finished = player_fixture.get('finished', False)
+                    kickoff = player_fixture.get('kickoff_time')
+                    if not finished and kickoff:
+                        try:
+                            from datetime import datetime, timezone, timedelta
+                            kickoff_dt = datetime.fromisoformat(kickoff.replace('Z', '+00:00'))
+                            now_utc = datetime.now(timezone.utc)
+                            # Fixture is in play if kickoff has passed but match hasn't finished
+                            # and we're within 3 hours of kickoff (typical match duration)
+                            if kickoff_dt < now_utc and (now_utc - kickoff_dt) < timedelta(hours=3):
+                                fixture_in_play = True
+                        except Exception:
+                            pass
+                
                 # If player has points or minutes, they've played
                 if points > 0 or minutes > 0:
                     # Player has played
-                    if minutes >= 90:
-                        status = f"Done ({minutes})"
-                    elif minutes > 0:
-                        status = f"Done ({minutes})"
+                    if fixture_in_play:
+                        # Game is currently in play
+                        if minutes >= 90:
+                            # Player has played full match, but game might still be finishing
+                            status = f"In Play ({minutes}')"
+                        elif minutes > 0:
+                            status = f"In Play ({minutes}')"
+                        else:
+                            # Has points but no minutes recorded yet (game just started)
+                            status = "In Play"
                     else:
-                        # Has points but no minutes recorded yet (might be live)
-                        status = f"Done"
+                        # Game is finished or not in play
+                        if minutes >= 90:
+                            status = f"Done ({minutes}')"
+                        elif minutes > 0:
+                            status = f"Done ({minutes}')"
+                        else:
+                            # Has points but no minutes recorded (unusual, but mark as done)
+                            status = "Done"
                 elif player_fixture:
                     # Check fixture status
                     finished = player_fixture.get('finished', False)

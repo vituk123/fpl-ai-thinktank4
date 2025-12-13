@@ -482,9 +482,15 @@ async def get_live_gameweek(
         )
         
         # If picks not available for current GW, try previous GW
+        # Also update gameweek if we fall back to previous GW
+        original_gameweek = gameweek
         if not picks_data or 'picks' not in picks_data:
             try:
                 picks_data = await loop.run_in_executor(None, api_client.get_entry_picks, entry_id, gameweek - 1, True)
+                if picks_data and 'picks' in picks_data:
+                    # Update gameweek to the one that has picks data
+                    gameweek = gameweek - 1
+                    logger.info(f"Live tracking: No picks for GW{original_gameweek}, using GW{gameweek} instead")
             except:
                 picks_data = None
         
@@ -595,13 +601,35 @@ async def get_current_gameweek():
                 meta={"event_name": ""}
             )
         
-        # Priority 1: Find next gameweek (is_next = True)
-        next_event = next((e for e in events if e.get('is_next', False)), None)
+        # For live tracking, we want the gameweek that is currently in session (being played)
+        # Priority 1: Find the latest gameweek that has started (deadline passed) but not finished
+        # This is the gameweek currently in session
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        current_event = None
         
-        # Priority 2: Find current gameweek (is_current = True)
+        # First, check is_current flag (most reliable indicator of gameweek in session)
         current_event = next((e for e in events if e.get('is_current', False)), None)
         
-        # Priority 3: If no current, find latest finished gameweek (most recent completed)
+        # If no is_current, find the latest gameweek that has started but not finished
+        if not current_event:
+            # Sort events by ID descending to check latest first
+            for event in sorted(events, key=lambda x: x.get('id', 0), reverse=True):
+                deadline_str = event.get('deadline_time')
+                if deadline_str:
+                    try:
+                        # Parse deadline (FPL API uses ISO format with timezone)
+                        deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+                        # If deadline has passed but gameweek is not finished, it's in session
+                        if deadline < now and not event.get('finished', False):
+                            current_event = event
+                            break
+                    except Exception as e:
+                        logger.debug(f"Error parsing deadline for event {event.get('id')}: {e}")
+                        pass
+        
+        # Priority 3: If still no current, find latest finished gameweek (most recent completed)
+        # This is the fallback - use the latest finished gameweek instead of is_next
         if not current_event:
             finished_events = [e for e in events if e.get('finished', False)]
             if finished_events:
@@ -611,8 +639,8 @@ async def get_current_gameweek():
         if not current_event and events:
             current_event = max(events, key=lambda x: x.get('id', 0))
         
-        # Use next_event if available, otherwise current_event
-        event = next_event or current_event
+        # Use current_event (gameweek in session or latest finished)
+        event = current_event
         gameweek = event.get('id', 1) if event else 1
         
         return StandardResponse(
@@ -1149,9 +1177,22 @@ async def get_ml_report(
         # #endregion
         
         # Get current gameweek if not specified
+        # Use the latest finished gameweek (not the next gameweek) to match ML system logic
+        # The ML system analyzes the latest played gameweek based on data availability
         if gameweek is None:
             bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
-            gameweek = api_client.get_current_gameweek()
+            events = bootstrap.get('events', [])
+            
+            # Priority 1: Find latest finished gameweek (most recent completed)
+            finished_events = [e for e in events if e.get('finished', False)]
+            if finished_events:
+                latest_finished = max(finished_events, key=lambda x: x.get('id', 0))
+                gameweek = latest_finished.get('id', 1)
+                logger.info(f"ML Report: Using latest finished gameweek: {gameweek}")
+            else:
+                # Fallback: use api_client.get_current_gameweek() if no finished events
+                gameweek = api_client.get_current_gameweek()
+                logger.info(f"ML Report: No finished events found, using get_current_gameweek(): {gameweek}")
         
         # Load all players with bootstrap data
         bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
