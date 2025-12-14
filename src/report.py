@@ -438,7 +438,7 @@ class ReportGenerator:
         
         logger.info(f"Report successfully generated at {output_path}")
     
-    def generate_report_data(self, entry_info: Dict, gameweek: int, current_squad: pd.DataFrame, recommendations: List[Dict], chip_evaluation: Dict, players_df: pd.DataFrame, fixtures: List[Dict] = None, team_map: Dict = None) -> Dict:
+    def generate_report_data(self, entry_info: Dict, gameweek: int, current_squad: pd.DataFrame, recommendations: List[Dict], chip_evaluation: Dict, players_df: pd.DataFrame, fixtures: List[Dict] = None, team_map: Dict = None, bootstrap: Dict = None) -> Dict:
         """
         Generate report data as JSON structure (same as generate_report but returns dict instead of markdown).
         """
@@ -636,11 +636,49 @@ class ReportGenerator:
             starting_xi_ids = set(starting_xi_df['id'])
             bench_df = updated_squad_df[~updated_squad_df['id'].isin(starting_xi_ids)]
             
+            # For updated squad, we want to show fixtures for the NEXT upcoming gameweek (deadline hasn't passed)
+            # Find the next gameweek using bootstrap events (is_next flag) or by checking deadlines
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            next_gameweek = None
+            
+            # First, try to find gameweek with is_next=True flag (most reliable)
+            if bootstrap and 'events' in bootstrap:
+                events = bootstrap.get('events', [])
+                next_event = next((e for e in events if e.get('is_next', False)), None)
+                if next_event:
+                    next_gameweek = next_event.get('id')
+                    logger.debug(f"Found next gameweek using is_next flag: {next_gameweek}")
+            
+            # If is_next not found, find the first gameweek where deadline hasn't passed
+            if not next_gameweek and bootstrap and 'events' in bootstrap:
+                events = bootstrap.get('events', [])
+                for event in sorted(events, key=lambda x: x.get('id', 0)):
+                    deadline_str = event.get('deadline_time')
+                    if deadline_str:
+                        try:
+                            deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+                            # If deadline is in the future, this is the next upcoming gameweek
+                            if deadline > now:
+                                next_gameweek = event.get('id')
+                                logger.debug(f"Found next gameweek by deadline check: {next_gameweek}")
+                                break
+                        except Exception:
+                            pass
+            
+            # Fallback: use gameweek + 1 if we couldn't find next gameweek
+            if not next_gameweek:
+                next_gameweek = gameweek + 1
+                logger.debug(f"Using fallback next gameweek: {next_gameweek}")
+            
+            next_gw_fixtures = [f for f in fixtures if f.get('event') == next_gameweek] if next_gameweek else []
+            
             # Starting XI
             if not starting_xi_df.empty:
                 starting_xi_df['price'] = starting_xi_df['now_cost'].apply(price_from_api)
+                # Use next gameweek fixtures for the updated squad
                 starting_xi_df['opponent'] = starting_xi_df.apply(
-                    lambda row: self._get_fixture_info(row, fixtures, team_map), axis=1
+                    lambda row: self._get_fixture_info(row, next_gw_fixtures, team_map), axis=1
                 )
                 starting_xi_df = starting_xi_df.sort_values('EV', ascending=False)
                 
@@ -657,8 +695,9 @@ class ReportGenerator:
             # Bench
             if not bench_df.empty:
                 bench_df['price'] = bench_df['now_cost'].apply(price_from_api)
+                # Use next gameweek fixtures for the updated squad
                 bench_df['opponent'] = bench_df.apply(
-                    lambda row: self._get_fixture_info(row, fixtures, team_map), axis=1
+                    lambda row: self._get_fixture_info(row, next_gw_fixtures, team_map), axis=1
                 )
                 bench_df = bench_df.sort_values('EV', ascending=False)
                 

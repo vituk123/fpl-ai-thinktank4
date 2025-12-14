@@ -389,6 +389,25 @@ const Recommendations: React.FC = () => {
             </div>
           )}
 
+          {/* Chip Recommendation */}
+          <div>
+            <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Chip Recommendation</h2>
+            <div className="bg-retro-background p-4 border-2 border-retro-primary">
+              <p className="text-sm mb-2">
+                <strong>Suggestion:</strong> Play <strong>{report.chip_recommendation.best_chip}</strong>.
+              </p>
+              {Object.entries(report.chip_recommendation.evaluations).length > 0 && (
+                <ul className="list-disc list-inside space-y-1 text-sm mt-2">
+                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
+                    <li key={chipName}>
+                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
           {/* Fixture Analysis Insights */}
           {(report.fixture_insights.best_fixture_runs.length > 0 || 
             report.fixture_insights.bgw_alerts.length > 0) && (
@@ -434,25 +453,6 @@ const Recommendations: React.FC = () => {
               )}
             </div>
           )}
-
-          {/* Chip Recommendation */}
-          <div>
-            <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Chip Recommendation</h2>
-            <div className="bg-retro-background p-4 border-2 border-retro-primary">
-              <p className="text-sm mb-2">
-                <strong>Suggestion:</strong> Play <strong>{report.chip_recommendation.best_chip}</strong>.
-              </p>
-              {Object.entries(report.chip_recommendation.evaluations).length > 0 && (
-                <ul className="list-disc list-inside space-y-1 text-sm mt-2">
-                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
-                    <li key={chipName}>
-                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
         </div>
       </DesktopWindow>
     </div>
