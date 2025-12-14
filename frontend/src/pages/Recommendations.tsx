@@ -3,7 +3,8 @@ import DesktopWindow from '../components/retroui/DesktopWindow';
 import { useAppContext } from '../context/AppContext';
 import { mlApi, imagesApi } from '../services/api';
 import { MLReport } from '../types';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import LoadingLogo from '../components/common/LoadingLogo';
+import Tooltip from '../components/common/Tooltip';
 
 const Recommendations: React.FC = () => {
   const { entryId, currentGameweek } = useAppContext();
@@ -62,10 +63,17 @@ const Recommendations: React.FC = () => {
   }
 
   if (loading) {
+    const mlPhases = [
+      { message: "Initializing ML Engine...", duration: 2000 },
+      { message: "Loading player data...", duration: 3000 },
+      { message: "Running machine learning models...", duration: 8000 },
+      { message: "Analyzing fixture difficulty...", duration: 3000 },
+      { message: "Generating transfer recommendations...", duration: 4000 },
+      { message: "Compiling comprehensive report...", duration: 2000 },
+    ];
     return (
       <div className="h-[80vh] flex flex-col items-center justify-center">
-        <LoadingSpinner text="Generating ML Report..." />
-        <p className="mt-4 font-mono text-xs opacity-60">Running complete analysis pipeline. This may take up to 5 minutes.</p>
+        <LoadingLogo phases={mlPhases} />
       </div>
     );
   }
@@ -117,7 +125,11 @@ const Recommendations: React.FC = () => {
                       <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
                       <th className="px-3 py-2 text-center text-xs font-bold">Pos</th>
                       <th className="px-3 py-2 text-center text-xs font-bold">Price</th>
-                      <th className="px-3 py-2 text-center text-xs font-bold">xP</th>
+                      <th className="px-3 py-2 text-center text-xs font-bold">
+                        <Tooltip text="Expected Points: ML model's prediction of points the player will score in the next gameweek">
+                          xP
+                        </Tooltip>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -144,7 +156,7 @@ const Recommendations: React.FC = () => {
             ) : (
               <div className="bg-retro-background p-4 border-2 border-retro-primary">
                 <p className="text-sm mb-2">
-                  <strong>Top Suggestion:</strong> {report.transfer_recommendations.top_suggestion.num_transfers} transfer(s) with a net EV gain of <strong>{report.transfer_recommendations.top_suggestion.net_ev_gain.toFixed(2)}</strong>.
+                  <strong>Top Suggestion:</strong> {report.transfer_recommendations.top_suggestion.num_transfers} transfer(s) with a net <Tooltip text="Expected Value: The predicted point gain from making this transfer">EV</Tooltip> gain of <strong>{report.transfer_recommendations.top_suggestion.net_ev_gain.toFixed(2)}</strong>.
                 </p>
                 <div className="mt-2 space-y-1 text-sm">
                   <p>
@@ -164,7 +176,7 @@ const Recommendations: React.FC = () => {
            report.transfer_recommendations.top_suggestion.players_in.length > 0 && (
             <div>
               <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Transfer Comparison</h2>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {report.transfer_recommendations.top_suggestion.players_out.map((playerOut, idx) => {
                   const playerIn = report.transfer_recommendations.top_suggestion!.players_in[idx] || report.transfer_recommendations.top_suggestion!.players_in[0];
                   
@@ -194,118 +206,132 @@ const Recommendations: React.FC = () => {
                   
                   return (
                     <div key={idx} className="bg-retro-background p-4 border-2 border-retro-primary">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Transfer Out */}
-                        <div className="border-2 border-retro-primary p-4">
-                          <div className="flex items-center mb-3">
-                            <img
-                              src={playerOut.id ? imagesApi.getPlayerImageUrl(playerOut.id) : imagesApi.getPlayerImageUrlFPL(0)}
-                              alt={playerOut.name}
-                              className="w-16 h-16 object-cover object-top mr-3 border-2 border-retro-primary"
-                              onError={(e) => {
-                                const img = e.target as HTMLImageElement;
-                                if (playerOut.id) {
-                                  img.src = imagesApi.getPlayerImageUrlFPL(playerOut.id);
-                                }
-                              }}
-                            />
-                            <div>
-                              <h3 className="font-bold text-lg">{playerOut.name}</h3>
-                              <p className="text-sm opacity-80">{playerOut.team}</p>
-                              <p className="text-xs opacity-60 mt-1">TRANSFER OUT</p>
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={playerOut.id ? imagesApi.getPlayerImageUrl(playerOut.id) : imagesApi.getPlayerImageUrlFPL(0)}
+                            alt={playerOut.name}
+                            className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
+                            onError={(e) => {
+                              const img = e.target as HTMLImageElement;
+                              if (playerOut.id) {
+                                img.src = imagesApi.getPlayerImageUrlFPL(playerOut.id);
+                              }
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="mb-2">
+                              <h3 className="font-bold text-base">{playerOut.name}</h3>
+                              <p className="text-xs opacity-80">{playerOut.team}</p>
+                              <p className="text-xs font-bold bg-red-100 text-red-700 border border-red-300 px-2 py-0.5 mt-0.5 inline-block">OUT</p>
                             </div>
-                          </div>
-                          
-                          <div className="space-y-2 mt-4">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Form:</span>
-                              <span className="font-mono">{formatStat(playerOut.form, 'form')}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">EV:</span>
-                              <span className="font-mono">{formatStat(playerOut.ev, 'ev')}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Ownership:</span>
-                              <span className="font-mono">{formatStat(playerOut.ownership, 'ownership')}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Points/G:</span>
-                              <span className="font-mono">{formatStat(playerOut.points_per_game, 'ppg')}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">FDR:</span>
-                              <span className="font-mono">{formatStat(playerOut.fixture_difficulty, 'fdr')}</span>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                              <div>
+                                <Tooltip text="Form: Average points scored in the last 3-5 gameweeks">
+                                  <span className="opacity-70">Form:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.form, 'form')}</span>
+                              </div>
+                              <div>
+                                <Tooltip text="Expected Value: ML model's prediction of points the player will score in the next gameweek">
+                                  <span className="opacity-70">EV:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.ev, 'ev')}</span>
+                              </div>
+                              <div>
+                                <span className="opacity-70">Ownership:</span>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.ownership, 'ownership')}</span>
+                              </div>
+                              <div>
+                                <Tooltip text="Points Per Game: Average points scored per 90 minutes played">
+                                  <span className="opacity-70">Points/G:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.points_per_game, 'ppg')}</span>
+                              </div>
+                              <div className="col-span-2">
+                                <Tooltip text="Fixture Difficulty Rating: Difficulty of upcoming fixtures (1-5, lower is easier)">
+                                  <span className="opacity-70">FDR:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.fixture_difficulty, 'fdr')}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
                         
                         {/* Transfer In */}
-                        <div className="border-2 border-retro-primary p-4 bg-retro-primary bg-opacity-10">
-                          <div className="flex items-center mb-3">
-                            <img
-                              src={playerIn.id ? imagesApi.getPlayerImageUrl(playerIn.id) : imagesApi.getPlayerImageUrlFPL(0)}
-                              alt={playerIn.name}
-                              className="w-16 h-16 object-cover object-top mr-3 border-2 border-retro-primary"
-                              onError={(e) => {
-                                const img = e.target as HTMLImageElement;
-                                if (playerIn.id) {
-                                  img.src = imagesApi.getPlayerImageUrlFPL(playerIn.id);
-                                }
-                              }}
-                            />
-                            <div>
-                              <h3 className="font-bold text-lg">{playerIn.name}</h3>
-                              <p className="text-sm opacity-80">{playerIn.team}</p>
-                              <p className="text-xs opacity-60 mt-1">TRANSFER IN</p>
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={playerIn.id ? imagesApi.getPlayerImageUrl(playerIn.id) : imagesApi.getPlayerImageUrlFPL(0)}
+                            alt={playerIn.name}
+                            className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
+                            onError={(e) => {
+                              const img = e.target as HTMLImageElement;
+                              if (playerIn.id) {
+                                img.src = imagesApi.getPlayerImageUrlFPL(playerIn.id);
+                              }
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="mb-2">
+                              <h3 className="font-bold text-base">{playerIn.name}</h3>
+                              <p className="text-xs opacity-80">{playerIn.team}</p>
+                              <p className="text-xs font-bold bg-green-100 text-green-700 border border-green-300 px-2 py-0.5 mt-0.5 inline-block">IN</p>
                             </div>
-                          </div>
-                          
-                          <div className="space-y-2 mt-4">
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Form:</span>
-                              <span className="font-mono">
-                                {formatStat(playerIn.form, 'form')}
-                                {isBetter(playerOut.form, playerIn.form) && (
-                                  <span className="ml-2 text-green-600">↑</span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">EV:</span>
-                              <span className="font-mono">
-                                {formatStat(playerIn.ev, 'ev')}
-                                {isBetter(playerOut.ev, playerIn.ev) && (
-                                  <span className="ml-2 text-green-600">↑</span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Ownership:</span>
-                              <span className="font-mono">
-                                {formatStat(playerIn.ownership, 'ownership')}
-                                {isBetter(playerOut.ownership, playerIn.ownership) && (
-                                  <span className="ml-2 text-green-600">↑</span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">Points/G:</span>
-                              <span className="font-mono">
-                                {formatStat(playerIn.points_per_game, 'ppg')}
-                                {isBetter(playerOut.points_per_game, playerIn.points_per_game) && (
-                                  <span className="ml-2 text-green-600">↑</span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="font-bold">FDR:</span>
-                              <span className="font-mono">
-                                {formatStat(playerIn.fixture_difficulty, 'fdr')}
-                                {isBetter(playerOut.fixture_difficulty, playerIn.fixture_difficulty, false) && (
-                                  <span className="ml-2 text-green-600">↑</span>
-                                )}
-                              </span>
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                              <div>
+                                <Tooltip text="Form: Average points scored in the last 3-5 gameweeks">
+                                  <span className="opacity-70">Form:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">
+                                  {formatStat(playerIn.form, 'form')}
+                                  {isBetter(playerOut.form, playerIn.form) && (
+                                    <span className="ml-1 text-green-600">↑</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div>
+                                <Tooltip text="Expected Value: ML model's prediction of points the player will score in the next gameweek">
+                                  <span className="opacity-70">EV:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">
+                                  {formatStat(playerIn.ev, 'ev')}
+                                  {isBetter(playerOut.ev, playerIn.ev) && (
+                                    <span className="ml-1 text-green-600">↑</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="opacity-70">Ownership:</span>
+                                <span className="ml-1 font-mono font-bold">
+                                  {formatStat(playerIn.ownership, 'ownership')}
+                                  {isBetter(playerOut.ownership, playerIn.ownership) && (
+                                    <span className="ml-1 text-green-600">↑</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div>
+                                <Tooltip text="Points Per Game: Average points scored per 90 minutes played">
+                                  <span className="opacity-70">Points/G:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">
+                                  {formatStat(playerIn.points_per_game, 'ppg')}
+                                  {isBetter(playerOut.points_per_game, playerIn.points_per_game) && (
+                                    <span className="ml-1 text-green-600">↑</span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="col-span-2">
+                                <Tooltip text="Fixture Difficulty Rating: Difficulty of upcoming fixtures (1-5, lower is easier)">
+                                  <span className="opacity-70">FDR:</span>
+                                </Tooltip>
+                                <span className="ml-1 font-mono font-bold">
+                                  {formatStat(playerIn.fixture_difficulty, 'fdr')}
+                                  {isBetter(playerOut.fixture_difficulty, playerIn.fixture_difficulty, false) && (
+                                    <span className="ml-1 text-green-600">↑</span>
+                                  )}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -334,7 +360,11 @@ const Recommendations: React.FC = () => {
                           <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Pos</th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Price</th>
-                          <th className="px-3 py-2 text-center text-xs font-bold">xP</th>
+                          <th className="px-3 py-2 text-center text-xs font-bold">
+                            <Tooltip text="Expected Points: ML model's prediction of points the player will score in the next gameweek">
+                              xP
+                            </Tooltip>
+                          </th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Fixture</th>
                         </tr>
                       </thead>
@@ -366,7 +396,11 @@ const Recommendations: React.FC = () => {
                           <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Pos</th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Price</th>
-                          <th className="px-3 py-2 text-center text-xs font-bold">xP</th>
+                          <th className="px-3 py-2 text-center text-xs font-bold">
+                            <Tooltip text="Expected Points: ML model's prediction of points the player will score in the next gameweek">
+                              xP
+                            </Tooltip>
+                          </th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Fixture</th>
                         </tr>
                       </thead>
@@ -423,7 +457,11 @@ const Recommendations: React.FC = () => {
                         <tr>
                           <th className="px-3 py-2 text-left text-xs font-bold">Player</th>
                           <th className="px-3 py-2 text-center text-xs font-bold">Team</th>
-                          <th className="px-3 py-2 text-center text-xs font-bold">Avg FDR</th>
+                          <th className="px-3 py-2 text-center text-xs font-bold">
+                            <Tooltip text="Average Fixture Difficulty Rating: Average difficulty of next 3 fixtures (1-5, lower is easier)">
+                              Avg FDR
+                            </Tooltip>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DesktopWindow from '../components/retroui/DesktopWindow';
 import { useAppContext } from '../context/AppContext';
 import { liveApi, imagesApi, entryApi } from '../services/api';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import LoadingLogo from '../components/common/LoadingLogo';
 
 const LiveTracking: React.FC = () => {
   const { entryId } = useAppContext();
@@ -11,90 +11,79 @@ const LiveTracking: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [currentGameweek, setCurrentGameweek] = useState<number>(1);
 
-  // Fetch current/live gameweek from backend (prioritizes is_current over is_next)
+  // Fetch live data - optimize by fetching gameweek and live data in parallel
   useEffect(() => {
-    const fetchCurrentGameweek = async () => {
-      try {
-        // Get current gameweek from backend - it will return the gameweek that is_current=True
-        // or is_next=True (for live tracking, we want the one in session)
-        const gameweek = await entryApi.getCurrentGameweek();
-        setCurrentGameweek(gameweek);
-        console.log('LiveTracking: Fetched current gameweek from backend:', gameweek);
-      } catch (error) {
-        console.error('LiveTracking: Failed to fetch current gameweek:', error);
-        // Fallback to 1 if fetch fails
-        setCurrentGameweek(1);
-      }
-    };
-
-    if (entryId) {
-      fetchCurrentGameweek();
-      // Refresh gameweek every 5 minutes
-      const interval = setInterval(fetchCurrentGameweek, 5 * 60 * 1000);
-      return () => clearInterval(interval);
+    if (!entryId) {
+      setLoading(false);
+      return;
     }
-  }, [entryId]);
 
-  const fetchLive = async () => {
-      if (!entryId) {
-        console.warn("LiveTracking: No entryId available");
-        setLoading(false);
-        return;
-      }
-      if (currentGameweek === 1) {
-        // Wait for gameweek to be fetched
-        console.log("LiveTracking: Waiting for gameweek to be fetched...");
-        return;
-      }
-      console.log("LiveTracking: Fetching data for entryId:", entryId, "gameweek:", currentGameweek);
+    const fetchData = async () => {
       try {
-        // Try current gameweek first
-        let data = await liveApi.getLiveGameweek(currentGameweek, entryId);
-        console.log("LiveTracking: Data received:", data);
+        // Fetch gameweek and live data in parallel for faster loading
+        // Use a reasonable default gameweek (16-20 range) to start, backend will handle if wrong
+        const defaultGameweek = 16; // Common gameweek range, will be corrected by backend
         
-        // Check if player breakdown is empty - if so, try previous gameweek
-        const playerBreakdown = data?.data?.player_breakdown || data?.player_breakdown || [];
-        if (playerBreakdown.length === 0 && currentGameweek > 1) {
-          console.log("LiveTracking: No players found for GW" + currentGameweek + ", trying GW" + (currentGameweek - 1));
-          try {
-            data = await liveApi.getLiveGameweek(currentGameweek - 1, entryId);
-            console.log("LiveTracking: Data received for GW" + (currentGameweek - 1) + ":", data);
-            // Update currentGameweek to the one that has data
-            setCurrentGameweek(currentGameweek - 1);
-          } catch (fallbackError) {
-            console.error("LiveTracking: Fallback to previous gameweek also failed:", fallbackError);
-          }
+        const [gameweekResult, liveDataResult] = await Promise.allSettled([
+          entryApi.getCurrentGameweek(),
+          liveApi.getLiveGameweek(defaultGameweek, entryId)
+        ]);
+
+        // Get the actual gameweek
+        let gameweek = defaultGameweek;
+        if (gameweekResult.status === 'fulfilled') {
+          gameweek = gameweekResult.value;
+          setCurrentGameweek(gameweek);
+          console.log('LiveTracking: Fetched current gameweek from backend:', gameweek);
         }
-        
-        console.log("LiveTracking: Data structure:", {
-          hasData: !!data,
-          hasDataData: !!data?.data,
-          livePoints: data?.data?.live_points || data?.live_points,
-          playerBreakdown: data?.data?.player_breakdown || data?.player_breakdown,
-          teamSummary: data?.data?.team_summary || data?.team_summary
-        });
-        setLiveData(data);
-        setLastUpdated(new Date());
+
+        // Handle live data result
+        if (liveDataResult.status === 'fulfilled' && liveDataResult.value) {
+          let data = liveDataResult.value;
+          const playerBreakdown = data?.data?.player_breakdown || data?.player_breakdown || [];
+          
+          // If data is empty and we have the correct gameweek, try fetching with that
+          if (playerBreakdown.length === 0 && gameweek !== defaultGameweek && gameweek > 1) {
+            console.log("LiveTracking: No players found, trying fetched gameweek:", gameweek);
+            try {
+              data = await liveApi.getLiveGameweek(gameweek, entryId);
+            } catch (e) {
+              console.error("LiveTracking: Failed to fetch with gameweek:", e);
+            }
+          }
+          
+          // Update gameweek from data if available
+          if (data?.data?.gameweek) {
+            setCurrentGameweek(data.data.gameweek);
+          }
+          
+          setLiveData(data);
+          setLastUpdated(new Date());
+        } else if (gameweekResult.status === 'fulfilled' && gameweek > 1) {
+          // If live data fetch failed but we have gameweek, try fetching with correct gameweek
+          try {
+            const data = await liveApi.getLiveGameweek(gameweek, entryId);
+            setLiveData(data);
+            setLastUpdated(new Date());
+          } catch (e: any) {
+            console.error("LiveTracking: Fetch error:", e);
+            setLiveData(null);
+          }
+        } else {
+          setLiveData(null);
+        }
       } catch (e: any) {
-        console.error("LiveTracking: Fetch error:", e);
-        console.error("LiveTracking: Error details:", {
-          message: e.message,
-          response: e.response?.data,
-          status: e.response?.status
-        });
+        console.error("LiveTracking: Error fetching data:", e);
         setLiveData(null);
       } finally {
         setLoading(false);
       }
-  };
+    };
 
-  useEffect(() => {
-    if (currentGameweek > 1) {
-      fetchLive();
-      const interval = setInterval(fetchLive, 60000); // 60s auto refresh
-      return () => clearInterval(interval);
-    }
-  }, [entryId, currentGameweek]);
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // 60s auto refresh
+    return () => clearInterval(interval);
+  }, [entryId]);
 
   if (!entryId) {
     return (
@@ -109,7 +98,15 @@ const LiveTracking: React.FC = () => {
     );
   }
 
-  if (loading) return <LoadingSpinner text="Syncing Live Data..." />;
+  if (loading) {
+    const livePhases = [
+      { message: "Syncing with FPL API...", duration: 2000 },
+      { message: "Calculating live points...", duration: 1500 },
+      { message: "Processing player data...", duration: 2000 },
+      { message: "Updating rankings...", duration: 1000 },
+    ];
+    return <LoadingLogo phases={livePhases} />;
+  }
 
   if (!liveData) {
     return (
@@ -145,12 +142,45 @@ const LiveTracking: React.FC = () => {
   }
   
   // Normalize team_summary format (Render uses gw_rank/live_rank, Edge Function uses gameweek_rank/overall_rank)
+  // Handle both formats and ensure we don't treat 0 as falsy (0 is a valid rank)
+  const gameweekRank = teamSummaryRaw.gameweek_rank ?? teamSummaryRaw.gw_rank ?? null;
+  const overallRank = teamSummaryRaw.overall_rank ?? teamSummaryRaw.live_rank ?? null;
+  
   const teamSummary = {
-    gameweek_rank: teamSummaryRaw.gameweek_rank || teamSummaryRaw.gw_rank || 0,
-    overall_rank: teamSummaryRaw.overall_rank || teamSummaryRaw.live_rank || 0,
+    gameweek_rank: gameweekRank !== null && gameweekRank !== undefined ? gameweekRank : null,
+    overall_rank: overallRank !== null && overallRank !== undefined ? overallRank : null,
     ...teamSummaryRaw
   };
   
+  console.log("LiveTracking: Team summary ranks:", {
+    raw: teamSummaryRaw,
+    normalized: { gameweek_rank: teamSummary.gameweek_rank, overall_rank: teamSummary.overall_rank }
+  });
+  
+  // Helper function to format status with local timezone conversion
+  const formatStatus = (status: string, kickoffTimeUtc: string | null | undefined): string => {
+    if (!status || !status.startsWith('Playing ')) {
+      return status;
+    }
+    
+    // If we have UTC kickoff time, convert it to local timezone
+    if (kickoffTimeUtc) {
+      try {
+        const kickoffDate = new Date(kickoffTimeUtc);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const day = dayNames[kickoffDate.getDay()];
+        const hours = kickoffDate.getHours().toString().padStart(2, '0');
+        const minutes = kickoffDate.getMinutes().toString().padStart(2, '0');
+        return `Playing ${day} ${hours}:${minutes}`;
+      } catch (e) {
+        console.error('Error formatting kickoff time:', e);
+        return status; // Fallback to original status
+      }
+    }
+    
+    return status;
+  };
+
   // Transform player_breakdown to match component expectations
   // Handle both Render backend format (has 'name', 'minutes', 'status', 'photo') and Edge Function format (has 'player_name', 'player_id')
   const elements = playerBreakdown.map((player: any, index: number) => {
@@ -176,7 +206,7 @@ const LiveTracking: React.FC = () => {
         is_starting: player.position <= 11,
         multiplier: player.is_captain ? 2 : 1,
         minutes_played: player.minutes || 0,
-        status: player.status || '',
+        status: formatStatus(player.status, player.kickoff_time_utc),
         opponent: player.opponent || '',
         team: player.team || '',
         photo: player.photo,
@@ -227,10 +257,10 @@ const LiveTracking: React.FC = () => {
                     <h3 className="text-xs uppercase font-bold tracking-widest mb-1">Live Points</h3>
                     <div className="text-5xl font-mono font-bold">{livePoints?.starting_xi || livePoints?.total || 0}</div>
                     <div className="mt-2 text-xs opacity-80 font-mono">
-                      GW Rank: {teamSummary.gameweek_rank ? teamSummary.gameweek_rank.toLocaleString() : '-'}
+                      GW Rank: {teamSummary.gameweek_rank !== null && teamSummary.gameweek_rank !== undefined ? teamSummary.gameweek_rank.toLocaleString() : '-'}
                     </div>
                     <div className="mt-1 text-xs opacity-60 font-mono">
-                      Overall: {teamSummary.overall_rank ? teamSummary.overall_rank.toLocaleString() : '-'}
+                      Overall: {teamSummary.overall_rank !== null && teamSummary.overall_rank !== undefined ? teamSummary.overall_rank.toLocaleString() : '-'}
                     </div>
                 </div>
                 
@@ -340,7 +370,19 @@ const LiveTracking: React.FC = () => {
                              />
                              <div className="flex-1">
                                  <div className="flex justify-between items-center">
-                                         <span className="font-bold text-sm">{pick.web_name}</span>
+                                         <div className="flex items-center gap-1">
+                                           <span className="font-bold text-sm">{pick.web_name}</span>
+                                           {pick.is_captain && (
+                                             <span className="bg-retro-primary text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
+                                               C
+                                             </span>
+                                           )}
+                                           {pick.is_vice_captain && !pick.is_captain && (
+                                             <span className="bg-gray-600 text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
+                                               V
+                                             </span>
+                                           )}
+                                         </div>
                                          <span className="font-mono font-bold text-lg">{pick.points}</span>
                                            </div>
                                      <div className="text-xs opacity-60 flex justify-between">
@@ -423,7 +465,19 @@ const LiveTracking: React.FC = () => {
                                    />
                                    <div className="flex-1">
                                        <div className="flex justify-between items-center">
-                                         <span className="font-bold text-sm">{pick.web_name}</span>
+                                         <div className="flex items-center gap-1">
+                                           <span className="font-bold text-sm">{pick.web_name}</span>
+                                           {pick.is_captain && (
+                                             <span className="bg-retro-primary text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
+                                               C
+                                             </span>
+                                           )}
+                                           {pick.is_vice_captain && !pick.is_captain && (
+                                             <span className="bg-gray-600 text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
+                                               V
+                                             </span>
+                                           )}
+                                         </div>
                                          <span className="font-mono font-bold text-lg">{pick.points}</span>
                                      </div>
                                      <div className="text-xs opacity-60 flex justify-between">

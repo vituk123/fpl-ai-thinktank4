@@ -100,7 +100,7 @@ const MiniLeagueTable: React.FC = () => {
   const selectedLeague = leagues.find(l => l.id === selectedLeagueId);
 
   return (
-    <DesktopWindow title="Mini-League Standings" className="col-span-1 md:col-span-2 lg:col-span-3">
+    <DesktopWindow title="Mini-League Standings" className="col-span-1 md:col-span-2">
       <div className="space-y-4">
         {/* League Selector */}
         <div className="flex items-center gap-4">
@@ -260,4 +260,9 @@ const MiniLeagueTable: React.FC = () => {
 };
 
 export default MiniLeagueTable;
+
+
+
+
+
 

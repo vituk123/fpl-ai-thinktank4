@@ -62,6 +62,7 @@ Deno.serve(async (req: Request) => {
     const livePoints = calculateLivePoints(picks, bootstrap, parseInt(gameweek))
     const playerBreakdown = getPlayerBreakdown(picks, bootstrap, fixtures, parseInt(gameweek))
     const teamSummary = getTeamSummary(entryInfo, entryHistory, parseInt(gameweek))
+    const autoSubstitutions = calculateAutoSubstitutions(picks, bootstrap, parseInt(gameweek))
 
     return new Response(
       JSON.stringify({
@@ -71,7 +72,7 @@ Deno.serve(async (req: Request) => {
           live_points: livePoints,
           player_breakdown: playerBreakdown,
           team_summary: teamSummary,
-          auto_substitutions: [],
+          auto_substitutions: autoSubstitutions,
           bonus_predictions: {},
           rank_projection: null,
           alerts: [],
@@ -193,5 +194,61 @@ function getTeamSummary(entryInfo: any, entryHistory: any, gameweek: number) {
     gameweek_points: gwData?.points || 0,
     gameweek_rank: gwData?.rank || 0,
   }
+}
+
+function calculateAutoSubstitutions(picksData: any, bootstrap: any, gameweek: number) {
+  if (!picksData?.picks) return []
+
+  const elements = Object.fromEntries(bootstrap.elements.map((e: any) => [e.id, e]))
+  const autoSubs = []
+
+  // Separate starting XI and bench
+  const startingXi = picksData.picks.filter((p: any) => p.position <= 11)
+  const bench = picksData.picks.filter((p: any) => p.position > 11)
+
+  // Check each starting XI player
+  for (const starter of startingXi) {
+    const element = elements[starter.element]
+    if (!element) continue
+
+    const points = element.event_points || 0
+    
+    // Heuristic: If player has 0 points, they likely didn't play
+    // Note: This is not perfect - a player could play and get 0 points
+    // For more accuracy, we'd need to fetch element-summary/{id}/ which has minutes
+    // but that requires many API calls. This heuristic works for most cases.
+    if (points === 0) {
+      const positionType = element.element_type // 1=GK, 2=DEF, 3=MID, 4=FWD
+      
+      // Find bench player of same position who played (has points > 0)
+      for (const benchPlayer of bench) {
+        const benchElement = elements[benchPlayer.element]
+        if (!benchElement) continue
+
+        const benchPoints = benchElement.event_points || 0
+        const benchPositionType = benchElement.element_type
+
+        // Match same position and bench player has points (played)
+        if (benchPoints > 0 && benchPositionType === positionType) {
+          autoSubs.push({
+            out: {
+              id: starter.element,
+              name: `${element.first_name} ${element.second_name}`,
+              position: starter.position
+            },
+            in: {
+              id: benchPlayer.element,
+              name: `${benchElement.first_name} ${benchElement.second_name}`,
+              position: benchPlayer.position
+            },
+            points_gain: benchPoints
+          })
+          break // Only one substitution per position
+        }
+      }
+    }
+  }
+
+  return autoSubs
 }
 

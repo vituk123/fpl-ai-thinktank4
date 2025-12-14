@@ -1,76 +1,20 @@
-# FPL Optimizer Frontend
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-React frontend application with Mainframe manifesto terminal aesthetic for the FPL Optimizer dashboard.
+# Run and deploy your AI Studio app
 
-## Features
+This contains everything you need to run your app locally.
 
-- **Terminal Aesthetic**: Monospace typography, minimalist black/white/green design
-- **Dashboard Analytics**: Comprehensive FPL analytics visualization
-- **News Integration**: Latest FPL news articles
-- **Live Tracking**: Real-time gameweek tracking
-- **Transfer Recommendations**: AI-powered transfer suggestions
-- **Responsive Design**: Works on mobile, tablet, and desktop
+View your app in AI Studio: https://ai.studio/apps/drive/1SZNezGMUbHtGiAVLOtaQFF6mgeElNwTR
 
-## Tech Stack
+## Run Locally
 
-- React 18+
-- Vite (build tool)
-- React Router v6
-- Axios
-- CSS (no CSS-in-JS)
+**Prerequisites:**  Node.js
 
-## Setup
 
 1. Install dependencies:
-```bash
-npm install
-```
-
-2. Create `.env` file (optional):
-```bash
-cp .env.example .env
-```
-
-3. Start development server:
-```bash
-npm run dev
-```
-
-The app will be available at `http://localhost:3000`
-
-## Environment Variables
-
-- `VITE_API_BASE_URL`: Base URL for the API (default: `http://localhost:8000/api/v1`)
-
-## Project Structure
-
-```
-frontend/
-├── src/
-│   ├── components/       # Reusable components
-│   ├── pages/            # Page components
-│   ├── services/         # API service layer
-│   ├── hooks/            # Custom React hooks
-│   ├── styles/           # CSS files
-│   └── utils/            # Utility functions
-├── public/               # Static assets
-└── package.json
-```
-
-## API Integration
-
-The frontend integrates with the FPL Dashboard API running on port 8000. Make sure the backend API is running before using the frontend.
-
-## Build for Production
-
-```bash
-npm run build
-```
-
-The built files will be in the `dist/` directory.
-
-## Development
-
-- Development server: `npm run dev`
-- Build: `npm run build`
-- Preview production build: `npm run preview`
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

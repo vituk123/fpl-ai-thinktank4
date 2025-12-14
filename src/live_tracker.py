@@ -909,9 +909,19 @@ class LiveGameweekTracker:
             squad_value = entry_info.get('last_deadline_value', 0) / 10.0
             total_value = squad_value + bank
             
-            # Live rank
-            live_rank = entry_info.get('summary_overall_rank', 0)
-            gw_rank = gw_data.get('rank', 0) if gw_data else 0
+            # Live rank (overall rank should always be available from entry_info)
+            live_rank = entry_info.get('summary_overall_rank')
+            # Gameweek rank might not be available if gameweek hasn't finished yet
+            gw_rank = None
+            if gw_data:
+                gw_rank = gw_data.get('rank')  # Don't default to 0, use None if missing
+                if gw_rank is None:
+                    logger.debug(f"GW{gameweek} rank not available in entry_history.current - gameweek may not be finished yet")
+            else:
+                logger.debug(f"GW{gameweek} data not found in entry_history.current")
+            
+            # Log what we found
+            logger.debug(f"Team summary ranks - Overall: {live_rank}, GW{gameweek}: {gw_rank}")
             
             # Mini-league rank (if league_id provided)
             mini_league_rank = None
@@ -1089,16 +1099,18 @@ class LiveGameweekTracker:
                         try:
                             from datetime import datetime, timezone, timedelta
                             # Parse kickoff time (always UTC in FPL API)
-                            kickoff_dt = datetime.fromisoformat(kickoff.replace('Z', '+00:00'))
+                            kickoff_dt_utc = datetime.fromisoformat(kickoff.replace('Z', '+00:00'))
+                            # Convert to local timezone for display
+                            kickoff_dt_local = kickoff_dt_utc.astimezone()
                             # Get current time in UTC for accurate comparison
                             now_utc = datetime.now(timezone.utc)
                             
                             # If kickoff has passed, check if enough time has elapsed for match to finish
                             # (matches typically last ~2 hours, so if kickoff was >3 hours ago, match is done)
-                            if kickoff_dt > now_utc:
-                                # Match hasn't started yet
-                                status = f"Playing {kickoff_dt.strftime('%a %H:%M')}"
-                            elif (now_utc - kickoff_dt) > timedelta(hours=3):
+                            if kickoff_dt_utc > now_utc:
+                                # Match hasn't started yet - show local time
+                                status = f"Playing {kickoff_dt_local.strftime('%a %H:%M')}"
+                            elif (now_utc - kickoff_dt_utc) > timedelta(hours=3):
                                 # Kickoff was more than 3 hours ago - match is definitely finished
                                 # Player has 0 points/minutes, so they didn't play
                                 status = "Did not play"
@@ -1106,12 +1118,12 @@ class LiveGameweekTracker:
                                 # Match might still be live (within 3 hours of kickoff)
                                 # But if player has 0 points/minutes, they likely didn't play
                                 # Check if we're past typical match end time (kickoff + 2 hours)
-                                match_end_time = kickoff_dt + timedelta(hours=2)
+                                match_end_time = kickoff_dt_utc + timedelta(hours=2)
                                 if now_utc > match_end_time:
                                     status = "Did not play"
                                 else:
-                                    # Match might still be live, show kickoff time
-                                    status = f"Playing {kickoff_dt.strftime('%a %H:%M')}"
+                                    # Match might still be live, show kickoff time in local timezone
+                                    status = f"Playing {kickoff_dt_local.strftime('%a %H:%M')}"
                         except Exception as e:
                             logger.debug(f"Error parsing kickoff time for player {player_id}: {e}")
                             # If we can't parse, but fixture exists and player has 0 points/minutes,
@@ -1144,6 +1156,11 @@ class LiveGameweekTracker:
                 else:
                     opponent_info = "N/A"
                 
+                # Add kickoff_time_utc if available for frontend timezone conversion
+                kickoff_time_utc = None
+                if player_fixture and player_fixture.get('kickoff_time'):
+                    kickoff_time_utc = player_fixture.get('kickoff_time')
+                
                 player_breakdown.append({
                     'id': player_id,
                     'name': element.get('web_name', 'Unknown'),
@@ -1155,6 +1172,7 @@ class LiveGameweekTracker:
                     'base_points': element.get('event_points', 0),
                     'minutes': minutes,
                     'status': status,
+                    'kickoff_time_utc': kickoff_time_utc,  # UTC ISO string for frontend timezone conversion
                     'ownership': ownership,
                     'is_captain': is_captain,
                     'is_vice': is_vice,

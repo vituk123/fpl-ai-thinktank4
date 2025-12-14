@@ -106,6 +106,30 @@ export const entryApi = {
       throw new Error(message);
     }
   },
+  getCurrentGameweek: async (): Promise<number> => {
+    try {
+      // Try GCE VM first
+      const gceVmUrl = 'http://35.192.15.52';
+      const response = await axios.get(`${gceVmUrl}/api/v1/gameweek/current`, {
+        timeout: 10000
+      });
+      if (response.data?.data?.gameweek) {
+        return response.data.data.gameweek;
+      }
+      return response.data?.gameweek || 1;
+    } catch (error) {
+      // Fallback to Render
+      try {
+        const response = await renderClient.get('/gameweek/current');
+        if (response.data?.data?.gameweek) {
+          return response.data.data.gameweek;
+        }
+        return response.data?.gameweek || 1;
+      } catch {
+        return 1;
+      }
+    }
+  },
 };
 
 export const dashboardApi = {
@@ -206,7 +230,7 @@ export const mlApi = {
     console.warn('ML players: Unexpected response format', responseData);
     return { players: [] };
   },
-  getMLReport: async (entryId: number, gameweek: number, fastMode: boolean = true): Promise<MLReport> => {
+  getMLReport: async (entryId: number, gameweek: number | undefined, fastMode: boolean = true): Promise<MLReport> => {
     // Try GCP directly first for full mode (bypasses Supabase 60s timeout)
     // For fast mode, use Supabase edge function (faster, stays under timeout)
     const useDirectGCP = !fastMode; // Use direct GCP for full mode
@@ -215,13 +239,17 @@ export const mlApi = {
       // Call GCE VM directly to avoid Supabase timeout for full ML analysis
       const gceVmUrl = 'http://35.192.15.52';
       console.log('mlApi.getMLReport: Calling GCE VM directly for full ML report');
+      const params: any = {
+        entry_id: entryId,
+        model_version: 'v4.6',
+        fast_mode: fastMode
+      };
+      // Only include gameweek if it's provided (backend will use current gameweek if not provided)
+      if (gameweek !== undefined && gameweek !== null) {
+        params.gameweek = gameweek;
+      }
       const response = await axios.get(`${gceVmUrl}/api/v1/ml/report`, {
-        params: {
-          entry_id: entryId,
-          gameweek: gameweek,
-          model_version: 'v4.6',
-          fast_mode: fastMode
-        },
+        params: params,
         timeout: 300000 // 5 minute timeout for full ML report
       });
       const responseData = response.data;
@@ -231,7 +259,16 @@ export const mlApi = {
       return responseData;
     } else {
       // Use Supabase edge function for fast mode (stays under 60s timeout)
-      const response = await supabaseClient.get(`/ml-report?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&fast_mode=${fastMode}`, {
+      const params = new URLSearchParams({
+        entry_id: String(entryId),
+        model_version: 'v4.6',
+        fast_mode: String(fastMode)
+      });
+      // Only include gameweek if it's provided
+      if (gameweek !== undefined && gameweek !== null) {
+        params.append('gameweek', String(gameweek));
+      }
+      const response = await supabaseClient.get(`/ml-report?${params.toString()}`, {
         timeout: 60000 // 1 minute timeout for fast mode
       });
       // Backend returns StandardResponse format: { data: {...}, meta: {...} }

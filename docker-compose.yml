@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  fpl-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fpl-api-backend
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    environment:
+      - PYTHON_VERSION=3.11
+      - PORT=8080
+    env_file:
+      - .env
+    # Load secrets from GCP Secret Manager (via startup script)
+    # Secrets will be injected as environment variables
+    volumes:
+      - ./models:/app/models:ro  # Mount models directory if exists
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '7'  # Leave 1 CPU for system
+          memory: 30G  # Leave 2GB for system
+        reservations:
+          cpus: '4'
+          memory: 16G
+

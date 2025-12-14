@@ -1,13 +1,88 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FPL Optimizer - Terminal Dashboard</title>
-  </head>
+    <title>FPL OPTIMIZER</title>
+    <link rel="icon" type="image/png" href="/logo3.png" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              retro: {
+                primary: '#1D1D1B',
+                secondary: '#C1C1BF',
+                bg: '#DADAD3',
+                error: '#E84C3D',
+                text: '#1D1D1B',
+                textSec: 'rgba(29, 29, 27, 0.7)',
+              }
+            },
+            boxShadow: {
+              'retro': '-0.6rem 0.6rem 0 rgba(29, 30, 28, 0.26)',
+              'retro-hover': '-0.4rem 0.4rem 0 rgba(29, 30, 28, 0.26)',
+              'retro-active': '0 0 0 rgba(29, 30, 28, 0.26)',
+            },
+            borderWidth: {
+              'retro': '2.5px',
+            },
+            fontFamily: {
+              sans: ['Roboto', 'system-ui', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #DADAD3;
+        color: #1D1D1B;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+      }
+      /* Custom Scrollbar for retro feel */
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #DADAD3;
+        border-left: 2.5px solid #1D1D1B;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #1D1D1B;
+        border: 2px solid #DADAD3;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+      .retro-pattern {
+         background-image: repeating-linear-gradient(45deg, #1D1D1B 0, #1D1D1B 1px, transparent 0, transparent 50%);
+         background-size: 10px 10px;
+         opacity: 0.1;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.559.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.1",
+    "axios": "https://aistudiocdn.com/axios@^1.13.2"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
