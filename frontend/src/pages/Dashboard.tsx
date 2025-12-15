@@ -268,11 +268,11 @@ const Dashboard: React.FC = () => {
       <DesktopWindow title="Ownership vs Points Correlation" className="col-span-1 md:col-span-2">
         {ownershipData?.data?.players && ownershipData.data.players.length > 0 ? (
           <div className="space-y-3">
-            {ownershipData.data.correlation_coefficient !== undefined && (
+            {ownershipData.data.correlation_coefficient != null && (
               <div className="border border-retro-primary p-2 bg-retro-background text-center">
                 <span className="text-xs uppercase font-bold">Correlation: </span>
                 <span className="text-sm font-mono font-bold">
-                  {ownershipData.data.correlation_coefficient.toFixed(3)}
+                  {Number(ownershipData.data.correlation_coefficient).toFixed(3)}
                 </span>
               </div>
             )}
