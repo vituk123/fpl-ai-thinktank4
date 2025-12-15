@@ -132,14 +132,41 @@ export const entryApi = {
   },
 };
 
+// Helper function to call dashboard endpoints with GCE VM fallback
+const callDashboardEndpoint = async (endpoint: string, params?: Record<string, any>) => {
+  const gceVmUrl = 'http://35.192.15.52';
+  const queryString = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : '';
+  
+  try {
+    // Try GCE VM first (where new endpoints are deployed)
+    const response = await axios.get(`${gceVmUrl}/api/v1${endpoint}${queryString}`, {
+      timeout: 30000 // 30 second timeout
+    });
+    return response.data;
+  } catch (gceError: any) {
+    console.warn(`Dashboard API: GCE VM failed for ${endpoint}, trying Render fallback:`, gceError.message);
+    // Fallback to Render
+    try {
+      const response = await renderClient.get(`${endpoint}${queryString}`, {
+        timeout: 30000
+      });
+      return response.data;
+    } catch (renderError: any) {
+      console.error(`Dashboard API: Both GCE VM and Render failed for ${endpoint}:`, {
+        gceError: gceError.message,
+        renderError: renderError.message
+      });
+      throw renderError;
+    }
+  }
+};
+
 export const dashboardApi = {
   getTeamHistory: async (entryId: number) => {
-    const response = await renderClient.get(`/dashboard/team/rank-progression?entry_id=${entryId}`);
-    return response.data;
+    return callDashboardEndpoint('/dashboard/team/rank-progression', { entry_id: entryId });
   },
   getValueTracker: async (entryId: number) => {
-    const response = await renderClient.get(`/dashboard/team/value-tracker?entry_id=${entryId}`);
-    return response.data;
+    return callDashboardEndpoint('/dashboard/team/value-tracker', { entry_id: entryId });
   },
   getLeagues: async (entryId: number) => {
       const response = await renderClient.get(`/entry/${entryId}/leagues`);
@@ -152,17 +179,14 @@ export const dashboardApi = {
     return response.data?.data || response.data || { standings: [], league_name: 'Unknown' };
   },
   getCaptainPerformance: async (entryId: number) => {
-    const response = await renderClient.get(`/dashboard/team/captain-performance?entry_id=${entryId}`);
-    return response.data;
+    return callDashboardEndpoint('/dashboard/team/captain-performance', { entry_id: entryId });
   },
   getTransferAnalysis: async (entryId: number) => {
-    const response = await renderClient.get(`/dashboard/team/transfer-analysis?entry_id=${entryId}`);
-    return response.data;
+    return callDashboardEndpoint('/dashboard/team/transfer-analysis', { entry_id: entryId });
   },
   getOwnershipCorrelation: async (gameweek?: number) => {
-    const params = gameweek ? `?gameweek=${gameweek}` : '';
-    const response = await renderClient.get(`/dashboard/ownership-correlation${params}`);
-    return response.data;
+    const params = gameweek ? { gameweek } : {};
+    return callDashboardEndpoint('/dashboard/ownership-correlation', params);
   }
 };
 
