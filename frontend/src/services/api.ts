@@ -150,6 +150,19 @@ export const dashboardApi = {
       const response = await renderClient.get(`/entry/${entryId}/league/${leagueId}/standings`);
       // Handle StandardResponse format
     return response.data?.data || response.data || { standings: [], league_name: 'Unknown' };
+  },
+  getCaptainPerformance: async (entryId: number) => {
+    const response = await renderClient.get(`/dashboard/team/captain-performance?entry_id=${entryId}`);
+    return response.data;
+  },
+  getTransferAnalysis: async (entryId: number) => {
+    const response = await renderClient.get(`/dashboard/team/transfer-analysis?entry_id=${entryId}`);
+    return response.data;
+  },
+  getOwnershipCorrelation: async (gameweek?: number) => {
+    const params = gameweek ? `?gameweek=${gameweek}` : '';
+    const response = await renderClient.get(`/dashboard/ownership-correlation${params}`);
+    return response.data;
   }
 };
 

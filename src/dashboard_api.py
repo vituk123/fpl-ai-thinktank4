@@ -696,6 +696,51 @@ async def get_rank_progression(
         logger.error(f"Error in rank progression endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/v1/dashboard/team/captain-performance")
+async def get_captain_performance(
+    entry_id: int = Query(..., description="FPL entry ID"),
+    season: Optional[int] = Query(None, description="Season year")
+):
+    """Get captain performance data"""
+    if not dashboard:
+        raise HTTPException(status_code=503, detail="Dashboard not initialized")
+    try:
+        data = dashboard.get_captain_performance(entry_id, season)
+        return StandardResponse(data=data, meta={"entry_id": entry_id, "season": season})
+    except Exception as e:
+        logger.error(f"Error in captain performance endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/dashboard/team/transfer-analysis")
+async def get_transfer_analysis(
+    entry_id: int = Query(..., description="FPL entry ID"),
+    season: Optional[int] = Query(None, description="Season year")
+):
+    """Get transfer analysis data"""
+    if not dashboard:
+        raise HTTPException(status_code=503, detail="Dashboard not initialized")
+    try:
+        data = dashboard.get_transfer_analysis(entry_id, season)
+        return StandardResponse(data=data, meta={"entry_id": entry_id, "season": season})
+    except Exception as e:
+        logger.error(f"Error in transfer analysis endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/dashboard/ownership-correlation")
+async def get_ownership_correlation(
+    season: Optional[int] = Query(None, description="Season year"),
+    gameweek: Optional[int] = Query(None, description="Gameweek number (default: current)")
+):
+    """Get ownership vs points correlation data"""
+    if not dashboard:
+        raise HTTPException(status_code=503, detail="Dashboard not initialized")
+    try:
+        data = dashboard.get_ownership_points_correlation(season, gameweek)
+        return StandardResponse(data=data, meta={"season": season, "gameweek": gameweek})
+    except Exception as e:
+        logger.error(f"Error in ownership correlation endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==================== RECOMMENDATIONS ENDPOINTS ====================
 @app.get("/api/v1/recommendations/transfers")

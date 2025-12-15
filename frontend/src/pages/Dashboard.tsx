@@ -9,16 +9,52 @@ import MiniLeagueTable from '../components/dashboard/MiniLeagueTable';
 const Dashboard: React.FC = () => {
   const { entryId, entryInfo } = useAppContext();
   const [history, setHistory] = useState<any>(null);
+  const [captainData, setCaptainData] = useState<any>(null);
+  const [transferData, setTransferData] = useState<any>(null);
+  const [ownershipData, setOwnershipData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!entryId) return;
       try {
-        const histData = await dashboardApi.getTeamHistory(entryId);
-        setHistory(histData);
+        // Fetch all data in parallel
+        const [historyResult, captainResult, transferResult, ownershipResult] = await Promise.allSettled([
+          dashboardApi.getTeamHistory(entryId),
+          dashboardApi.getCaptainPerformance(entryId),
+          dashboardApi.getTransferAnalysis(entryId),
+          dashboardApi.getOwnershipCorrelation()
+        ]);
+
+        if (historyResult.status === 'fulfilled') {
+          console.log('Dashboard: Team history response:', historyResult.value);
+          setHistory(historyResult.value);
+        } else {
+          console.error('Dashboard: Error fetching team history:', historyResult.reason);
+        }
+
+        if (captainResult.status === 'fulfilled') {
+          console.log('Dashboard: Captain performance response:', captainResult.value);
+          setCaptainData(captainResult.value);
+        } else {
+          console.error('Dashboard: Error fetching captain performance:', captainResult.reason);
+        }
+
+        if (transferResult.status === 'fulfilled') {
+          console.log('Dashboard: Transfer analysis response:', transferResult.value);
+          setTransferData(transferResult.value);
+        } else {
+          console.error('Dashboard: Error fetching transfer analysis:', transferResult.reason);
+        }
+
+        if (ownershipResult.status === 'fulfilled') {
+          console.log('Dashboard: Ownership correlation response:', ownershipResult.value);
+          setOwnershipData(ownershipResult.value);
+        } else {
+          console.error('Dashboard: Error fetching ownership correlation:', ownershipResult.reason);
+        }
       } catch (e) {
-        console.error(e);
+        console.error('Dashboard: Error fetching data:', e);
       } finally {
         setLoading(false);
       }
@@ -36,9 +72,34 @@ const Dashboard: React.FC = () => {
     return <LoadingLogo phases={dashboardPhases} />;
   }
 
-  // Transform data for charts (mock logic if structure varies, assuming standard API response)
-  // Assuming history is array of { event: number, overall_rank: number }
-  const chartData = history?.history || [];
+  // Transform data for charts - handle different response structures
+  let chartData: any[] = [];
+  if (history) {
+    // Backend returns StandardResponse format: { data: { gameweeks: [], overall_rank: [] }, meta: {} }
+    const data = history.data || history;
+    
+    // If backend returns separate arrays for gameweeks and overall_rank, combine them
+    if (data.gameweeks && Array.isArray(data.gameweeks) && data.overall_rank && Array.isArray(data.overall_rank)) {
+      chartData = data.gameweeks.map((gw: number, index: number) => ({
+        event: gw,
+        overall_rank: data.overall_rank[index] || 0
+      }));
+    } 
+    // If it's already an array of objects
+    else if (Array.isArray(data)) {
+      chartData = data;
+    } 
+    // If data has a history array
+    else if (data.history && Array.isArray(data.history)) {
+      chartData = data.history;
+    }
+    // If data has rank_progression array
+    else if (data.rank_progression && Array.isArray(data.rank_progression)) {
+      chartData = data.rank_progression;
+    }
+  }
+  
+  console.log('Dashboard: Chart data:', chartData);
 
   return (
     <div className="p-4 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-24">
@@ -73,15 +134,46 @@ const Dashboard: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
-                        <XAxis dataKey="event" stroke="#1D1D1B" style={{ fontSize: '12px', fontFamily: 'monospace' }} />
-                        <YAxis reversed stroke="#1D1D1B" style={{ fontSize: '12px', fontFamily: 'monospace' }} />
+                        <XAxis 
+                            dataKey="event" 
+                            stroke="#1D1D1B" 
+                            style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                            label={{ value: 'Gameweek', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fontSize: '12px', fontFamily: 'monospace', fill: '#1D1D1B' } }}
+                        />
+                        <YAxis 
+                            reversed 
+                            stroke="#1D1D1B" 
+                            style={{ fontSize: '12px', fontFamily: 'monospace' }}
+                            tickFormatter={(value) => {
+                                if (value >= 1000000) {
+                                    const millions = Math.round(value / 1000000);
+                                    return `Top ${millions} Mill`;
+                                } else if (value >= 1000) {
+                                    const thousands = Math.round(value / 1000);
+                                    return `Top ${thousands}K`;
+                                }
+                                return `Top ${value}`;
+                            }}
+                            label={{ value: 'Overall Rank', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: '12px', fontFamily: 'monospace', fill: '#1D1D1B' } }}
+                        />
                         <Tooltip 
                             contentStyle={{ 
                                 backgroundColor: '#FFF', 
                                 border: '2.5px solid #1D1D1B', 
                                 boxShadow: '4px 4px 0 rgba(0,0,0,0.2)',
                                 borderRadius: 0 
-                            }} 
+                            }}
+                            formatter={(value: any) => {
+                                const rank = Number(value);
+                                if (rank >= 1000000) {
+                                    const millions = Math.round(rank / 1000000);
+                                    return `Top ${millions} Mill`;
+                                } else if (rank >= 1000) {
+                                    const thousands = Math.round(rank / 1000);
+                                    return `Top ${thousands}K`;
+                                }
+                                return `Top ${rank}`;
+                            }}
                         />
                         <Line type="step" dataKey="overall_rank" stroke="#1D1D1B" strokeWidth={2.5} dot={{ stroke: '#1D1D1B', strokeWidth: 2, r: 4, fill: '#fff' }} />
                     </LineChart>
@@ -92,13 +184,124 @@ const Dashboard: React.FC = () => {
          </div>
       </DesktopWindow>
 
-      {/* Placeholders for other widgets */}
-      <DesktopWindow title="System Status" className="col-span-1">
-          <div className="font-mono text-xs space-y-2">
-              <p>API_CONNECTION: <span className="text-green-600 font-bold">ESTABLISHED</span></p>
-              <p>DATA_STREAM: <span className="text-green-600 font-bold">ACTIVE</span></p>
-              <p>LAST_UPDATE: {new Date().toLocaleTimeString()}</p>
+      {/* Captain Performance Section */}
+      <DesktopWindow title="Captain Performance" className="col-span-1">
+        {captainData?.data?.captains && captainData.data.captains.length > 0 ? (
+          <div className="space-y-3">
+            {(() => {
+              const captains = captainData.data.captains;
+              // Find most captained player
+              const mostCaptained = captains.reduce((max: any, curr: any) => 
+                curr.times_captained > max.times_captained ? curr : max, captains[0]);
+              // Calculate total captain points
+              const totalCaptainPoints = captains.reduce((sum: number, c: any) => sum + (c.doubled_points || 0), 0);
+              // Calculate average captain points
+              const avgCaptainPoints = captains.length > 0 ? totalCaptainPoints / captains.length : 0;
+              
+              return (
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="border border-retro-primary p-3 bg-retro-background">
+                    <span className="block text-[10px] uppercase font-bold mb-1">Most Captained</span>
+                    <span className="text-base font-mono font-bold">{mostCaptained?.player_name || 'N/A'}</span>
+                    <span className="block text-xs text-gray-600 mt-1">{mostCaptained?.times_captained || 0}x</span>
+                  </div>
+                  <div className="border border-retro-primary p-3 bg-retro-background">
+                    <span className="block text-[10px] uppercase font-bold mb-1">Total Captain Points</span>
+                    <span className="text-lg font-mono font-bold">{totalCaptainPoints.toFixed(0)}</span>
+                  </div>
+                  <div className="border border-retro-primary p-3 bg-retro-background">
+                    <span className="block text-[10px] uppercase font-bold mb-1">Average Captain Points</span>
+                    <span className="text-lg font-mono font-bold">{avgCaptainPoints.toFixed(1)}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
+        ) : (
+          <div className="font-mono text-xs opacity-50 text-center py-4">NO DATA AVAILABLE</div>
+        )}
+      </DesktopWindow>
+
+      {/* Transfer Analysis Section */}
+      <DesktopWindow title="Transfer Analysis" className="col-span-1 md:col-span-2">
+        {transferData?.data?.transfers && transferData.data.transfers.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="border-b-2 border-retro-primary">
+                  <th className="text-left p-2 uppercase font-bold">GW</th>
+                  <th className="text-left p-2 uppercase font-bold">Players In</th>
+                  <th className="text-left p-2 uppercase font-bold">Players Out</th>
+                  <th className="text-right p-2 uppercase font-bold">Predicted</th>
+                  <th className="text-right p-2 uppercase font-bold">Actual</th>
+                  <th className="text-right p-2 uppercase font-bold">Success %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transferData.data.transfers.map((transfer: any, index: number) => (
+                  <tr key={index} className="border-b border-retro-primary hover:bg-retro-background">
+                    <td className="p-2 font-bold">{transfer.gw}</td>
+                    <td className="p-2">
+                      {Array.isArray(transfer.players_in) 
+                        ? transfer.players_in.join(', ') 
+                        : transfer.players_in || '-'}
+                    </td>
+                    <td className="p-2">
+                      {Array.isArray(transfer.players_out) 
+                        ? transfer.players_out.join(', ') 
+                        : transfer.players_out || '-'}
+                    </td>
+                    <td className="p-2 text-right">{transfer.predicted_gain?.toFixed(1) || '0.0'}</td>
+                    <td className="p-2 text-right">{transfer.actual_gain?.toFixed(1) || '0.0'}</td>
+                    <td className="p-2 text-right">{transfer.success_rate?.toFixed(1) || '0.0'}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="font-mono text-xs opacity-50 text-center py-4">NO DATA AVAILABLE</div>
+        )}
+      </DesktopWindow>
+
+      {/* Ownership vs Points Correlation Section */}
+      <DesktopWindow title="Ownership vs Points Correlation" className="col-span-1 md:col-span-2">
+        {ownershipData?.data?.players && ownershipData.data.players.length > 0 ? (
+          <div className="space-y-3">
+            {ownershipData.data.correlation_coefficient !== undefined && (
+              <div className="border border-retro-primary p-2 bg-retro-background text-center">
+                <span className="text-xs uppercase font-bold">Correlation: </span>
+                <span className="text-sm font-mono font-bold">
+                  {ownershipData.data.correlation_coefficient.toFixed(3)}
+                </span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="border-b-2 border-retro-primary">
+                    <th className="text-left p-2 uppercase font-bold">Player</th>
+                    <th className="text-right p-2 uppercase font-bold">Ownership %</th>
+                    <th className="text-right p-2 uppercase font-bold">Points</th>
+                    <th className="text-right p-2 uppercase font-bold">Differential</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ownershipData.data.players.slice(0, 25).map((player: any, index: number) => (
+                    <tr key={index} className="border-b border-retro-primary hover:bg-retro-background">
+                      <td className="p-2 font-bold">{player.name}</td>
+                      <td className="p-2 text-right">{player.ownership?.toFixed(1) || '0.0'}%</td>
+                      <td className="p-2 text-right">{player.total_points || 0}</td>
+                      <td className="p-2 text-right font-bold">{player.differential_score?.toFixed(2) || '0.00'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="font-mono text-xs opacity-50 text-center py-4">NO DATA AVAILABLE</div>
+        )}
       </DesktopWindow>
 
     </div>
