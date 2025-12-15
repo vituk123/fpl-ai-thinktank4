@@ -140,7 +140,7 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
   try {
     // Try GCE VM first (where new endpoints are deployed)
     const response = await axios.get(`${gceVmUrl}/api/v1${endpoint}${queryString}`, {
-      timeout: 30000 // 30 second timeout
+      timeout: 10000 // 10 second timeout (reduced for faster fallback)
     });
     return response.data;
   } catch (gceError: any) {
@@ -148,15 +148,28 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
     // Fallback to Render
     try {
       const response = await renderClient.get(`${endpoint}${queryString}`, {
-        timeout: 30000
+        timeout: 10000 // 10 second timeout
       });
       return response.data;
     } catch (renderError: any) {
       console.error(`Dashboard API: Both GCE VM and Render failed for ${endpoint}:`, {
         gceError: gceError.message,
-        renderError: renderError.message
+        renderError: renderError.message,
+        renderStatus: renderError.response?.status
       });
-      throw renderError;
+      // Return empty data structure instead of throwing to prevent UI breakage
+      // This allows components to render with "NO DATA AVAILABLE" messages
+      if (endpoint.includes('ownership-correlation')) {
+        return { data: { players: [], correlation_coefficient: null } };
+      } else if (endpoint.includes('captain-performance')) {
+        return { data: { captains: [] } };
+      } else if (endpoint.includes('transfer-analysis')) {
+        return { data: { transfers: [] } };
+      } else if (endpoint.includes('rank-progression')) {
+        return { data: { gameweeks: [], overall_rank: [] } };
+      }
+      // Generic fallback
+      return { data: {} };
     }
   }
 };
