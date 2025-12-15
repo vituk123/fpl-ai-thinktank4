@@ -182,6 +182,9 @@ class VisualizationDashboard:
                         
                         # Calculate actual gain (simplified - would need more complex calculation)
                         actual_gain = 0  # Placeholder
+                        # #region agent log
+                        import json; log_data = {'location': 'visualization_dashboard.py:184', 'message': 'Transfer actual_gain hardcoded', 'data': {'gw': gw, 'predicted_gain': predicted_gain, 'actual_gain': actual_gain}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'B'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                        # #endregion
                         
                         players_in = rec_transfers.get('players_in', []) if isinstance(rec_transfers, dict) else []
                         players_out = rec_transfers.get('players_out', []) if isinstance(rec_transfers, dict) else []
@@ -366,7 +369,13 @@ class VisualizationDashboard:
                                 points = 0
                                 if self.db_manager:
                                     history_df = self.db_manager.get_current_season_history()
+                                    # #region agent log
+                                    import json; log_data = {'location': 'visualization_dashboard.py:369', 'message': 'Captain points lookup', 'data': {'player_id': player_id, 'gw': gw, 'history_df_empty': history_df.empty, 'history_df_shape': list(history_df.shape) if not history_df.empty else None, 'history_df_columns': list(history_df.columns) if not history_df.empty else None}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'A'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                                    # #endregion
                                     player_gw = history_df[(history_df['player_id'] == player_id) & (history_df['gw'] == gw)]
+                                    # #region agent log
+                                    log_data = {'location': 'visualization_dashboard.py:371', 'message': 'Captain points after filter', 'data': {'player_gw_empty': player_gw.empty, 'points_found': int(player_gw.iloc[0]['total_points']) if not player_gw.empty else 0}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'A'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                                    # #endregion
                                     if not player_gw.empty:
                                         points = int(player_gw.iloc[0]['total_points'])
                                 
@@ -529,7 +538,13 @@ class VisualizationDashboard:
             # Get points from database
             if self.db_manager:
                 history_df = self.db_manager.get_current_season_history()
+                # #region agent log
+                import json; log_data = {'location': 'visualization_dashboard.py:531', 'message': 'Ownership correlation DB lookup start', 'data': {'gameweek': gameweek, 'history_df_empty': history_df.empty, 'history_df_shape': list(history_df.shape) if not history_df.empty else None}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'A'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                # #endregion
                 current_gw_data = history_df[history_df['gw'] == gameweek] if not history_df.empty else pd.DataFrame()
+                # #region agent log
+                log_data = {'location': 'visualization_dashboard.py:532', 'message': 'Ownership correlation filtered by gameweek', 'data': {'current_gw_data_empty': current_gw_data.empty, 'current_gw_data_shape': list(current_gw_data.shape) if not current_gw_data.empty else None, 'current_gw_data_columns': list(current_gw_data.columns) if not current_gw_data.empty else None}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'D'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                # #endregion
                 
                 for element in bootstrap['elements']:
                     player_id = element['id']
@@ -539,6 +554,10 @@ class VisualizationDashboard:
                     # Get points for this gameweek
                     player_gw = current_gw_data[current_gw_data['player_id'] == player_id] if not current_gw_data.empty else pd.DataFrame()
                     total_points = int(player_gw.iloc[0]['total_points']) if not player_gw.empty else 0
+                    # #region agent log
+                    if player_id <= 5:  # Log first 5 players to avoid too many logs
+                        log_data = {'location': 'visualization_dashboard.py:541', 'message': 'Ownership correlation player points', 'data': {'player_id': player_id, 'player_name': player_name, 'player_gw_empty': player_gw.empty, 'total_points': total_points}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'E'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
+                    # #endregion
                     
                     # Calculate differential score (low ownership, high points)
                     differential_score = total_points / (ownership + 1) if ownership > 0 else total_points
