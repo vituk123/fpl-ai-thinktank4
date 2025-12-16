@@ -263,7 +263,18 @@ const Dashboard: React.FC = () => {
 
       {/* Transfer Analysis Section */}
       <DesktopWindow title="Transfer Analysis" className="col-span-1 md:col-span-2">
-        {transferData?.data?.transfers && Array.isArray(transferData.data.transfers) && transferData.data.transfers.length > 0 ? (
+        {(() => {
+          const transfers = transferData?.data?.transfers;
+          console.log('Transfer Analysis Render Check:', {
+            hasTransferData: !!transferData,
+            hasData: !!transferData?.data,
+            hasTransfers: !!transfers,
+            transfersLength: transfers?.length,
+            isArray: Array.isArray(transfers),
+            shouldRender: transfers && Array.isArray(transfers) && transfers.length > 0
+          });
+          return transfers && Array.isArray(transfers) && transfers.length > 0;
+        })() ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
               <thead>
