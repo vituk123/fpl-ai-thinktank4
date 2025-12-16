@@ -214,18 +214,7 @@ const Dashboard: React.FC = () => {
 
       {/* Captain Performance Section */}
       <DesktopWindow title="Captain Performance" className="col-span-1">
-        {(() => {
-          const captains = captainData?.data?.captains;
-          console.log('Captain Performance Render Check:', {
-            hasCaptainData: !!captainData,
-            hasData: !!captainData?.data,
-            hasCaptains: !!captains,
-            captainsLength: captains?.length,
-            isArray: Array.isArray(captains),
-            shouldRender: captains && Array.isArray(captains) && captains.length > 0
-          });
-          return captains && Array.isArray(captains) && captains.length > 0;
-        })() ? (
+        {captainData?.data?.captains && Array.isArray(captainData.data.captains) && captainData.data.captains.length > 0 ? (
           <div className="space-y-3">
             {(() => {
               const captains = captainData.data.captains;
@@ -263,18 +252,7 @@ const Dashboard: React.FC = () => {
 
       {/* Transfer Analysis Section */}
       <DesktopWindow title="Transfer Analysis" className="col-span-1 md:col-span-2">
-        {(() => {
-          const transfers = transferData?.data?.transfers;
-          console.log('Transfer Analysis Render Check:', {
-            hasTransferData: !!transferData,
-            hasData: !!transferData?.data,
-            hasTransfers: !!transfers,
-            transfersLength: transfers?.length,
-            isArray: Array.isArray(transfers),
-            shouldRender: transfers && Array.isArray(transfers) && transfers.length > 0
-          });
-          return transfers && Array.isArray(transfers) && transfers.length > 0;
-        })() ? (
+        {transferData?.data?.transfers && Array.isArray(transferData.data.transfers) && transferData.data.transfers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
               <thead>
