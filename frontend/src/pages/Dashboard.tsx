@@ -150,9 +150,9 @@ const Dashboard: React.FC = () => {
 
       {/* Rank History Chart */}
       <DesktopWindow title="Rank Progression" className="col-span-1 md:col-span-2 min-h-[300px]">
-        <div className="h-64 w-full">
+        <div className="h-64 w-full min-h-[256px]">
             {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={256}>
                     <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
                         <XAxis 

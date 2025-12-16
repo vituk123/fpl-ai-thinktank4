@@ -140,7 +140,7 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
   try {
     // Try GCE VM first (where new endpoints are deployed)
     const response = await axios.get(`${gceVmUrl}/api/v1${endpoint}${queryString}`, {
-      timeout: 10000 // 10 second timeout (reduced for faster fallback)
+      timeout: 30000 // 30 second timeout (increased for slow database queries)
     });
     return response.data;
   } catch (gceError: any) {
@@ -148,7 +148,7 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
     // Fallback to Render
     try {
       const response = await renderClient.get(`${endpoint}${queryString}`, {
-        timeout: 10000 // 10 second timeout
+        timeout: 30000 // 30 second timeout
       });
       return response.data;
     } catch (renderError: any) {
