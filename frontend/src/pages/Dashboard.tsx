@@ -157,9 +157,9 @@ const Dashboard: React.FC = () => {
 
       {/* Rank History Chart */}
       <DesktopWindow title="Rank Progression" className="col-span-1 md:col-span-2 min-h-[300px]">
-        <div className="h-64 w-full min-h-[256px]">
+        <div className="h-64 w-full" style={{ minHeight: '256px', minWidth: '100%' }}>
             {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%" minHeight={256}>
+                <ResponsiveContainer width="100%" height="100%" minHeight={256} minWidth={0}>
                     <LineChart data={chartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#ccc" />
                         <XAxis 
@@ -214,7 +214,18 @@ const Dashboard: React.FC = () => {
 
       {/* Captain Performance Section */}
       <DesktopWindow title="Captain Performance" className="col-span-1">
-        {captainData?.data?.captains && captainData.data.captains.length > 0 ? (
+        {(() => {
+          const captains = captainData?.data?.captains;
+          console.log('Captain Performance Render Check:', {
+            hasCaptainData: !!captainData,
+            hasData: !!captainData?.data,
+            hasCaptains: !!captains,
+            captainsLength: captains?.length,
+            isArray: Array.isArray(captains),
+            shouldRender: captains && Array.isArray(captains) && captains.length > 0
+          });
+          return captains && Array.isArray(captains) && captains.length > 0;
+        })() ? (
           <div className="space-y-3">
             {(() => {
               const captains = captainData.data.captains;
