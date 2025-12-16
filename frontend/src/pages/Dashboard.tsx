@@ -51,6 +51,13 @@ const Dashboard: React.FC = () => {
 
         if (transferResult.status === 'fulfilled') {
           console.log('Dashboard: Transfer analysis response:', transferResult.value);
+          console.log('Dashboard: Transfer analysis data structure:', {
+            hasData: !!transferResult.value?.data,
+            hasTransfers: !!transferResult.value?.data?.transfers,
+            transfersLength: transferResult.value?.data?.transfers?.length,
+            transfersType: typeof transferResult.value?.data?.transfers,
+            isArray: Array.isArray(transferResult.value?.data?.transfers)
+          });
           // #region agent log
           const transferData = transferResult.value?.data || transferResult.value;
           const transfers = transferData?.transfers || [];
@@ -245,7 +252,7 @@ const Dashboard: React.FC = () => {
 
       {/* Transfer Analysis Section */}
       <DesktopWindow title="Transfer Analysis" className="col-span-1 md:col-span-2">
-        {transferData?.data?.transfers && transferData.data.transfers.length > 0 ? (
+        {transferData?.data?.transfers && Array.isArray(transferData.data.transfers) && transferData.data.transfers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
               <thead>
