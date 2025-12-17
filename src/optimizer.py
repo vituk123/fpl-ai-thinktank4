@@ -463,6 +463,17 @@ class TransferOptimizer:
         Returns:
             Dictionary with recommendations, forced transfer info
         """
+        # #region agent log
+        import json
+        try:
+            log_path = r'C:\fpl-api\debug.log'
+            squad_player_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"location":"optimizer.py:452","message":"generate_smart_recommendations entry","data":{"squadSize":len(current_squad),"playerIds":squad_player_ids,"problemPlayers":{"Gabriel(5)":5 in squad_player_ids,"Caicedo(241)":241 in squad_player_ids,"Casemiro(457)":457 in squad_player_ids,"Burn(476)":476 in squad_player_ids}},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
         # Identify forced transfers: injured, suspended, or doubtful with low chance
         # Check status and chance_of_playing
         forced_mask = pd.Series(False, index=current_squad.index)
