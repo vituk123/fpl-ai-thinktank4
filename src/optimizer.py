@@ -1,14 +1,18 @@
 """
 Transfer optimizer with PuLP linear programming.
-v3.3: Strict enforcement of forced transfers.
+v3.3: Strict enforcement of forced transfers + GW15 player blocking.
 """
 import pandas as pd
 import pulp
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 import logging
 from .utils import price_from_api
 
 logger = logging.getLogger(__name__)
+
+# CRITICAL: Global set of players that should NEVER appear in recommendations
+# These players were removed from the game/user's squad before GW16
+BLOCKED_PLAYER_IDS: Set[int] = {5, 241}  # Gabriel, Caicedo
 
 class TransferOptimizer:
     def __init__(self, config: Dict):
