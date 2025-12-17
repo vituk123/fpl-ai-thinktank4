@@ -1468,12 +1468,16 @@ async def get_ml_report(
             merge_columns = ['id'] + [col for col in ev_columns if col in players_df.columns]
             
             if len(merge_columns) > 1:  # More than just 'id'
+                # Log before merge
+                logger.info(f"ML Report: Before merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
                 current_squad = current_squad.merge(
                     players_df[merge_columns],
                     on='id',
                     how='left',
                     suffixes=('', '_new')
                 )
+                # Log after merge
+                logger.info(f"ML Report: After merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
             
             # Ensure EV column exists in current_squad (fallback if merge didn't work)
             if 'EV' not in current_squad.columns:
