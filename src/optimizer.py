@@ -24,37 +24,61 @@ class TransferOptimizer:
         """
         Get current squad for the specified gameweek.
         
-        If the gameweek is in session (is_current=True), use that gameweek's picks
-        as they reflect transfers made before the deadline.
-        Otherwise, use the last played gameweek's picks.
+        Logic:
+        1. If gameweek is in session (is_current=True), use that gameweek's picks
+        2. If gameweek is finished, use that gameweek's picks (most recent completed squad)
+        3. If gameweek hasn't started yet (is_next=True), find the most recent finished gameweek
+        4. Only fall back to gameweek-1 if none of the above work
         """
-        # Check if the provided gameweek is in session (current)
-        # This is important because picks for the current gameweek reflect transfers
-        # made before the deadline, while last played gameweek's picks may be outdated
         bootstrap = api_client.get_bootstrap_static(use_cache=True)
         events = bootstrap.get('events', [])
-        current_event = next((e for e in events if e.get('id') == gameweek), None)
-        is_current = current_event and current_event.get('is_current', False)
+        target_event = next((e for e in events if e.get('id') == gameweek), None)
         
-        # If gameweek is in session, use its picks (they include recent transfers)
+        is_current = target_event and target_event.get('is_current', False)
+        is_finished = target_event and target_event.get('finished', False)
+        is_next = target_event and target_event.get('is_next', False)
+        
+        # Priority 1: If gameweek is in session, use its picks (includes recent transfers)
         if is_current:
             target_picks_gw = gameweek
             logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
+        
+        # Priority 2: If gameweek is finished, use its picks (most recent completed squad)
+        elif is_finished:
+            target_picks_gw = gameweek
+            logger.info(f"Gameweek {gameweek} is finished, using picks from GW{target_picks_gw} (most recent completed squad)")
+        
+        # Priority 3: If gameweek hasn't started yet, find the most recent finished gameweek
+        elif is_next:
+            # Find the most recent finished gameweek (this is the current squad)
+            finished_events = [e for e in events if e.get('finished', False)]
+            if finished_events:
+                most_recent_finished = max(finished_events, key=lambda x: x.get('id', 0))
+                target_picks_gw = most_recent_finished.get('id')
+                logger.info(f"Gameweek {gameweek} hasn't started yet, using picks from most recent finished GW{target_picks_gw}")
+            else:
+                # Fallback: use gameweek - 1
+                target_picks_gw = max(1, gameweek - 1)
+                logger.warning(f"No finished gameweeks found, falling back to GW{target_picks_gw}")
+        
+        # Priority 4: Fallback to gameweek - 1
         else:
-            # Gameweek is not in session, use last played gameweek
-            last_played_gw = max(1, gameweek - 1)
-            history = api_client.get_entry_history(entry_id)
-            chips_used = history.get('chips', [])
-            
-            free_hit_active = False
-            for chip in chips_used:
-                if chip['event'] == last_played_gw and chip['name'] == 'freehit':
-                    free_hit_active = True
-                    break
-            
-            # If free hit was active, use gameweek before that
-            target_picks_gw = max(1, last_played_gw - 1) if free_hit_active else last_played_gw
-            logger.info(f"Gameweek {gameweek} is not in session, using picks from last played GW{target_picks_gw}")
+            target_picks_gw = max(1, gameweek - 1)
+            logger.warning(f"Could not determine gameweek status, falling back to GW{target_picks_gw}")
+        
+        # Check for free hit chip (affects which gameweek's picks to use)
+        history = api_client.get_entry_history(entry_id)
+        chips_used = history.get('chips', [])
+        free_hit_active = False
+        for chip in chips_used:
+            if chip['event'] == target_picks_gw and chip['name'] == 'freehit':
+                free_hit_active = True
+                break
+        
+        # If free hit was active in the target gameweek, use the gameweek before that
+        if free_hit_active:
+            target_picks_gw = max(1, target_picks_gw - 1)
+            logger.info(f"Free hit was active in GW{target_picks_gw + 1}, using picks from GW{target_picks_gw} instead")
         
         # Try to get picks for the target gameweek
         picks_data = api_client.get_entry_picks(entry_id, target_picks_gw)
