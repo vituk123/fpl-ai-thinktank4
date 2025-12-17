@@ -1330,6 +1330,9 @@ async def get_ml_report(
             except: pass
             # #endregion
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
+            # CRITICAL: Make a deep copy immediately to prevent any modifications to the original
+            if not current_squad.empty:
+                current_squad = current_squad.copy()
             if current_squad.empty:
                 logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
                 current_squad_ids = set()
@@ -1338,6 +1341,9 @@ async def get_ml_report(
                 current_squad_ids = set(current_squad['id'].tolist())
                 current_squad_teams = set(current_squad['team'].dropna().unique())
                 logger.info(f"ML Report: Retrieved squad with {len(current_squad)} players. Player IDs: {sorted(current_squad_ids)}")
+                # Verify no problem players
+                if 5 in current_squad_ids or 241 in current_squad_ids:
+                    logger.error(f"ML Report: ERROR - Problem players found in squad! Gabriel (5): {5 in current_squad_ids}, Caicedo (241): {241 in current_squad_ids}")
                 # #region agent log
                 try:
                     with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
