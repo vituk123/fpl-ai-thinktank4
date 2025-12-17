@@ -1275,6 +1275,11 @@ async def get_ml_report(
                     current_event = max(finished_events, key=lambda x: x.get('id', 0))
                     logger.info(f"ML Report: No gameweek in session, using latest finished gameweek: {current_event.get('id')}")
             
+            # CRITICAL FIX: If current_event is both is_current and finished, prioritize finished
+            # This ensures we use the most recent completed gameweek's picks (which reflect transfers)
+            if current_event and current_event.get('finished', False) and current_event.get('is_current', False):
+                logger.info(f"ML Report: Gameweek {current_event.get('id')} is both current and finished, using it (finished takes priority)")
+            
             # Priority 4: Final fallback: latest event by ID (highest gameweek number)
             if not current_event and events:
                 current_event = max(events, key=lambda x: x.get('id', 0))
