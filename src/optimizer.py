@@ -153,47 +153,47 @@ class TransferOptimizer:
         # #endregion
         picks_data = api_client.get_entry_picks(entry_id, target_picks_gw, use_cache=False)
         
-        # #region agent log
-        try:
-            has_picks = picks_data and 'picks' in picks_data
-            player_ids_from_api = [p['element'] for p in picks_data.get('picks', [])] if has_picks else []
-            with open(r'C:\fpl-api\debug.log', 'a') as f:
-                f.write(json.dumps({"location":"optimizer.py:90","message":"After API call for picks","data":{"target_picks_gw":target_picks_gw,"has_picks":has_picks,"player_ids_count":len(player_ids_from_api),"player_ids":player_ids_from_api[:15]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
+        # CRITICAL FIX: If picks contain problem players, try next gameweek
+        if picks_data and 'picks' in picks_data:
+            player_ids_in_picks = {p['element'] for p in picks_data['picks']}
+            if gameweek >= 16 and PROBLEM_PLAYER_IDS.intersection(player_ids_in_picks):
+                logger.error(f"CRITICAL: GW{target_picks_gw} picks contain problem players {PROBLEM_PLAYER_IDS.intersection(player_ids_in_picks)}! These players were removed before GW16.")
+                # Try next gameweek to get updated squad
+                next_gw = target_picks_gw + 1
+                logger.warning(f"Attempting to fetch GW{next_gw} picks to get updated squad...")
+                next_picks = api_client.get_entry_picks(entry_id, next_gw, use_cache=False)
+                if next_picks and 'picks' in next_picks:
+                    next_player_ids = {p['element'] for p in next_picks['picks']}
+                    if not PROBLEM_PLAYER_IDS.intersection(next_player_ids):
+                        logger.info(f"SUCCESS: GW{next_gw} picks are clean, using them instead")
+                        picks_data = next_picks
+                        target_picks_gw = next_gw
+                    else:
+                        logger.error(f"GW{next_gw} also contains problem players! Will filter them out...")
         
         # If picks not available for target gameweek, try the provided gameweek as fallback
         if not picks_data or 'picks' not in picks_data:
             if target_picks_gw != gameweek:
                 logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback")
-                # #region agent log
-                try:
-                    with open(r'C:\fpl-api\debug.log', 'a') as f:
-                        f.write(json.dumps({"location":"optimizer.py:97","message":"Trying fallback gameweek","data":{"target_picks_gw":target_picks_gw,"fallback_gameweek":gameweek},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-                except: pass
-                # #endregion
                 picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
                 if picks_data and 'picks' in picks_data:
                     target_picks_gw = gameweek
-                    # #region agent log
-                    try:
-                        fallback_player_ids = [p['element'] for p in picks_data.get('picks', [])]
-                        with open(r'C:\fpl-api\debug.log', 'a') as f:
-                            f.write(json.dumps({"location":"optimizer.py:103","message":"Fallback gameweek success","data":{"target_picks_gw":target_picks_gw,"player_ids":fallback_player_ids[:15]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-                    except: pass
-                    # #endregion
         
         if not picks_data or 'picks' not in picks_data:
             logger.warning(f"No picks data available for entry {entry_id}, gameweek {target_picks_gw}")
-            # #region agent log
-            try:
-                with open(r'C:\fpl-api\debug.log', 'a') as f:
-                    f.write(json.dumps({"location":"optimizer.py:110","message":"No picks data available","data":{"entry_id":entry_id,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-            except: pass
-            # #endregion
             return pd.DataFrame()
 
         player_ids = [p['element'] for p in picks_data['picks']]
+        
+        # CRITICAL FILTER: Remove problem players for GW16+
+        if gameweek >= 16:
+            original_count = len(player_ids)
+            player_ids = [pid for pid in player_ids if pid not in PROBLEM_PLAYER_IDS]
+            if len(player_ids) < original_count:
+                logger.error(f"CRITICAL: Removed {original_count - len(player_ids)} problem players from picks! Original: {original_count}, Filtered: {len(player_ids)}")
+                removed_players = PROBLEM_PLAYER_IDS.intersection(set([p['element'] for p in picks_data['picks']]))
+                logger.error(f"Problem players removed: {removed_players}")
+        
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
         if not squad_df.empty:
