@@ -172,8 +172,15 @@ class TransferOptimizer:
                         logger.error(f"GW{next_gw} also contains problem players! Will filter them out...")
         
         # If picks not available for target gameweek, try the provided gameweek as fallback
+        # CRITICAL: For GW16+, NEVER fall back to GW15 (gameweek-1) as it contains removed players
         if not picks_data or 'picks' not in picks_data:
-            if target_picks_gw != gameweek:
+            if target_picks_gw != gameweek and gameweek >= 16:
+                # For GW16+, try the gameweek itself, but NEVER gameweek-1
+                logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback (NOT GW{gameweek-1} to avoid GW15 players)")
+                picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
+                if picks_data and 'picks' in picks_data:
+                    target_picks_gw = gameweek
+            elif target_picks_gw != gameweek:
                 logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback")
                 picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
                 if picks_data and 'picks' in picks_data:
