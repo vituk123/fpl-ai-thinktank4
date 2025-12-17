@@ -1629,17 +1629,29 @@ async def get_ml_report(
         # Pass all_fixtures (not just current gameweek) so report generator can use next gameweek for updated squad
         # Also pass bootstrap to find next upcoming gameweek using is_next flag
         # #region agent log
-        logger.info(f"ML Report: Before report generator - current_squad empty: {current_squad.empty}, size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist()) if not current_squad.empty else []}")
+        # Verify recommendations before passing to report generator
+        final_recommendations = smart_recs.get('recommendations', [])
+        problem_player_ids = {5, 241}  # Gabriel, Caicedo
+        for rec in final_recommendations:
+            players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
+            has_problem = bool(players_out_ids.intersection(problem_player_ids))
+            if has_problem:
+                logger.error(f"ML Report: CRITICAL - Found GW15 players in recommendations BEFORE report generator! Rec players OUT IDs: {list(players_out_ids)}")
+        
+        logger.info(f"ML Report: Before report generator - current_squad empty: {current_squad.empty}, size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist()) if not current_squad.empty else []}, recommendations count: {len(final_recommendations)}")
         try:
             log_path = r'C:\fpl-api\debug.log'
             squad_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+            rec_players_out = []
+            if final_recommendations:
+                rec_players_out = [p.get('id') for p in final_recommendations[0].get('players_out', [])]
             with open(log_path, 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1570","message":"Before report generator","data":{"currentSquadEmpty":current_squad.empty,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":squad_ids},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                f.write(json.dumps({"location":"dashboard_api.py:1635","message":"Before report generator","data":{"currentSquadEmpty":current_squad.empty,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":squad_ids,"recommendationsCount":len(final_recommendations),"topRecPlayersOut":rec_players_out},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
         report_generator = ReportGenerator(config)
         report_data = report_generator.generate_report_data(
-            entry_info, gameweek, current_squad, smart_recs['recommendations'],
+            entry_info, gameweek, current_squad, final_recommendations,
             chip_evals, players_df, all_fixtures, team_map, bootstrap
         )
         
