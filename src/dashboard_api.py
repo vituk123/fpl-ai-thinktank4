@@ -1581,13 +1581,6 @@ async def get_ml_report(
         #         except: pass
         #         # #endregion
         logger.info("Learning system temporarily disabled for debugging")
-            ml_engine_instance = MLEngine(db_manager, model_version=model_version)
-            if ml_engine_instance.load_model():
-                ml_engine_instance.is_trained = True
-                smart_recs['recommendations'] = apply_learning_system(
-                    db_manager, api_client, entry_id, gameweek,
-                    smart_recs['recommendations'], ml_engine_instance
-                )
         
         # Evaluate chips (like main.py)
         chip_eval = ChipEvaluator(config)
