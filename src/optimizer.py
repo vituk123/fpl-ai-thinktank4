@@ -185,19 +185,35 @@ class TransferOptimizer:
 
         player_ids = [p['element'] for p in picks_data['picks']]
         
-        # CRITICAL FILTER: Remove problem players for GW16+
+        # CRITICAL FILTER: ALWAYS remove problem players for GW16+ (no exceptions)
         if gameweek >= 16:
             original_count = len(player_ids)
-            player_ids = [pid for pid in player_ids if pid not in PROBLEM_PLAYER_IDS]
-            if len(player_ids) < original_count:
-                logger.error(f"CRITICAL: Removed {original_count - len(player_ids)} problem players from picks! Original: {original_count}, Filtered: {len(player_ids)}")
-                removed_players = PROBLEM_PLAYER_IDS.intersection(set([p['element'] for p in picks_data['picks']]))
-                logger.error(f"Problem players removed: {removed_players}")
+            original_player_ids_set = set(player_ids)
+            problem_found = PROBLEM_PLAYER_IDS.intersection(original_player_ids_set)
+            
+            if problem_found:
+                logger.error(f"CRITICAL: Found problem players {problem_found} in picks from GW{target_picks_gw}! Filtering them out immediately.")
+                player_ids = [pid for pid in player_ids if pid not in PROBLEM_PLAYER_IDS]
+                logger.error(f"CRITICAL: Removed {original_count - len(player_ids)} problem players! Original count: {original_count}, Filtered count: {len(player_ids)}")
+                logger.error(f"Original player IDs: {sorted(original_player_ids_set)}")
+                logger.error(f"Filtered player IDs: {sorted(player_ids)}")
+            else:
+                logger.info(f"No problem players found in picks. Squad is clean.")
         
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
+        # Final verification - squad should NEVER contain problem players
+        if not squad_df.empty and gameweek >= 16:
+            squad_ids_set = set(squad_df['id'].tolist())
+            final_problem_check = PROBLEM_PLAYER_IDS.intersection(squad_ids_set)
+            if final_problem_check:
+                logger.error(f"CRITICAL ERROR: Problem players {final_problem_check} STILL in squad_df after filtering! This should never happen!")
+                # Force remove them from squad_df
+                squad_df = squad_df[~squad_df['id'].isin(PROBLEM_PLAYER_IDS)].copy()
+                logger.error(f"Force-removed problem players. New squad size: {len(squad_df)}")
+        
         if not squad_df.empty:
-            logger.info(f"Retrieved squad with {len(squad_df)} players from GW{target_picks_gw}. Player IDs: {sorted(player_ids)}")
+            logger.info(f"Retrieved squad with {len(squad_df)} players from GW{target_picks_gw}. Player IDs: {sorted(squad_df['id'].tolist())}")
         else:
             logger.warning(f"Retrieved empty squad from GW{target_picks_gw}. Player IDs from picks: {player_ids}")
         
