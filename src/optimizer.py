@@ -39,9 +39,10 @@ class TransferOptimizer:
         is_next = target_event and target_event.get('is_next', False)
         
         # #region agent log
-        import json
+        import json, os
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log')
+            with open(log_path, 'a') as f:
                 f.write(json.dumps({"location":"optimizer.py:39","message":"get_current_squad entry","data":{"entry_id":entry_id,"gameweek":gameweek,"target_event_id":target_event.get('id') if target_event else None,"is_current":is_current,"is_finished":is_finished,"is_next":is_next},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
         except: pass
         # #endregion
@@ -54,7 +55,8 @@ class TransferOptimizer:
             logger.info(f"Gameweek {gameweek} is finished, using picks from GW{target_picks_gw} (most recent completed squad)")
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log')
+                with open(log_path, 'a') as f:
                     f.write(json.dumps({"location":"optimizer.py:47","message":"Priority 1: finished gameweek","data":{"gameweek":gameweek,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
             except: pass
             # #endregion
@@ -65,7 +67,7 @@ class TransferOptimizer:
             logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"optimizer.py:53","message":"Priority 2: current gameweek","data":{"gameweek":gameweek,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
             except: pass
             # #endregion
@@ -80,7 +82,7 @@ class TransferOptimizer:
                 logger.info(f"Gameweek {gameweek} hasn't started yet, using picks from most recent finished GW{target_picks_gw}")
                 # #region agent log
                 try:
-                    with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                         f.write(json.dumps({"location":"optimizer.py:60","message":"Priority 3: most recent finished","data":{"gameweek":gameweek,"target_picks_gw":target_picks_gw,"most_recent_finished_id":most_recent_finished.get('id')},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
                 except: pass
                 # #endregion
@@ -90,7 +92,7 @@ class TransferOptimizer:
                 logger.warning(f"No finished gameweeks found, falling back to GW{target_picks_gw}")
                 # #region agent log
                 try:
-                    with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                         f.write(json.dumps({"location":"optimizer.py:66","message":"Priority 3 fallback: gameweek-1","data":{"gameweek":gameweek,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
                 except: pass
                 # #endregion
@@ -101,7 +103,7 @@ class TransferOptimizer:
             logger.warning(f"Could not determine gameweek status, falling back to GW{target_picks_gw}")
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"optimizer.py:72","message":"Priority 4 fallback: gameweek-1","data":{"gameweek":gameweek,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
             except: pass
             # #endregion
@@ -123,7 +125,8 @@ class TransferOptimizer:
         # Try to get picks for the target gameweek
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log')
+            with open(log_path, 'a') as f:
                 f.write(json.dumps({"location":"optimizer.py:84","message":"Before API call for picks","data":{"entry_id":entry_id,"target_picks_gw":target_picks_gw,"gameweek":gameweek},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -133,7 +136,7 @@ class TransferOptimizer:
         try:
             has_picks = picks_data and 'picks' in picks_data
             player_ids_from_api = [p['element'] for p in picks_data.get('picks', [])] if has_picks else []
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"optimizer.py:90","message":"After API call for picks","data":{"target_picks_gw":target_picks_gw,"has_picks":has_picks,"player_ids_count":len(player_ids_from_api),"player_ids":player_ids_from_api[:15]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -144,7 +147,7 @@ class TransferOptimizer:
                 logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback")
                 # #region agent log
                 try:
-                    with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                         f.write(json.dumps({"location":"optimizer.py:97","message":"Trying fallback gameweek","data":{"target_picks_gw":target_picks_gw,"fallback_gameweek":gameweek},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
                 except: pass
                 # #endregion
@@ -154,7 +157,7 @@ class TransferOptimizer:
                     # #region agent log
                     try:
                         fallback_player_ids = [p['element'] for p in picks_data.get('picks', [])]
-                        with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                             f.write(json.dumps({"location":"optimizer.py:103","message":"Fallback gameweek success","data":{"target_picks_gw":target_picks_gw,"player_ids":fallback_player_ids[:15]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
                     except: pass
                     # #endregion
@@ -163,7 +166,7 @@ class TransferOptimizer:
             logger.warning(f"No picks data available for entry {entry_id}, gameweek {target_picks_gw}")
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"optimizer.py:110","message":"No picks data available","data":{"entry_id":entry_id,"target_picks_gw":target_picks_gw},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
             except: pass
             # #endregion
@@ -179,7 +182,7 @@ class TransferOptimizer:
         
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"optimizer.py:122","message":"get_current_squad exit","data":{"target_picks_gw":target_picks_gw,"squad_size":len(squad_df),"player_ids":sorted(player_ids)[:15]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + '\n')
         except: pass
         # #endregion

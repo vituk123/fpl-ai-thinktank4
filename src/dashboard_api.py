@@ -1216,7 +1216,7 @@ async def get_ml_report(
     # #region agent log
     import json
     try:
-        with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
             f.write(json.dumps({"location":"dashboard_api.py:1084","message":"ML report endpoint entry","data":{"entry_id":entry_id,"gameweek":gameweek,"model_version":model_version},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
     except: pass
     # #endregion
@@ -1232,7 +1232,7 @@ async def get_ml_report(
         
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"dashboard_api.py:1098","message":"After imports and loop setup","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -1285,7 +1285,7 @@ async def get_ml_report(
             # #region agent log
             import json
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"dashboard_api.py:1284","message":"ML Report gameweek determination","data":{"gameweek":gameweek,"is_current":current_event.get('is_current', False) if current_event else False,"finished":current_event.get('finished', False) if current_event else False,"is_next":current_event.get('is_next', False) if current_event else False},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
             except: pass
             # #endregion
@@ -1301,7 +1301,7 @@ async def get_ml_report(
         # Get user's entry info and history
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"dashboard_api.py:1113","message":"Before entry info fetch","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -1309,7 +1309,7 @@ async def get_ml_report(
         entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"dashboard_api.py:1115","message":"After entry info fetch","data":{"hasEntryInfo":bool(entry_info),"hasEntryHistory":bool(entry_history)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -1320,7 +1320,7 @@ async def get_ml_report(
             logger.info(f"ML Report: Getting current squad for entry {entry_id}, target gameweek {gameweek}")
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"dashboard_api.py:1313","message":"Before get_current_squad call","data":{"entry_id":entry_id,"gameweek":gameweek},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
             except: pass
             # #endregion
@@ -1335,7 +1335,7 @@ async def get_ml_report(
                 logger.info(f"ML Report: Retrieved squad with {len(current_squad)} players. Player IDs: {sorted(current_squad_ids)}")
                 # #region agent log
                 try:
-                    with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                         f.write(json.dumps({"location":"dashboard_api.py:1320","message":"After get_current_squad call","data":{"squad_size":len(current_squad),"player_ids":sorted(list(current_squad_ids))[:15]},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
                 except: pass
                 # #endregion
@@ -1440,7 +1440,7 @@ async def get_ml_report(
         # Generate transfer recommendations (like main.py)
         # #region agent log
         try:
-            with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                 f.write(json.dumps({"location":"dashboard_api.py:1202","message":"Before transfer recommendations","data":{"currentSquadEmpty":current_squad.empty if not current_squad.empty else True,"currentSquadLen":len(current_squad)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
@@ -1499,7 +1499,7 @@ async def get_ml_report(
             
             # #region agent log
             try:
-                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
                     f.write(json.dumps({"location":"dashboard_api.py:1250","message":"Before generate_smart_recommendations","data":{"freeTransfers":free_transfers,"bank":bank,"availablePlayersLen":len(available_players),"currentSquadHasEV":'EV' in current_squad.columns},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
             except: pass
             # #endregion
