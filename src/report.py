@@ -613,12 +613,29 @@ class ReportGenerator:
                     "fixture_difficulty": fixture_difficulty
                 }
             
-            # Build enhanced player lists with stats
-            out_players = [get_player_stats(p) for p in rec.get('players_out', [])]
-            in_players = [get_player_stats(p) for p in rec.get('players_in', [])]
+            # CRITICAL FIX: Filter out GW15 players (Gabriel=5, Caicedo=241) from recommendations
+            # These players were removed before GW16 and should NEVER be in recommendations
+            problem_player_ids = {5, 241}  # Gabriel, Caicedo
+            original_players_out = rec.get('players_out', [])
+            filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
+            
+            if len(filtered_players_out) < len(original_players_out):
+                # Remove corresponding players_in to maintain transfer balance
+                removed_count = len(original_players_out) - len(filtered_players_out)
+                original_players_in = rec.get('players_in', [])
+                filtered_players_in = original_players_in[:-removed_count] if removed_count > 0 and len(original_players_in) >= removed_count else original_players_in[:len(filtered_players_out)]
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Report Generator: Removed {removed_count} GW15 players from recommendations. Original OUT IDs: {[p.get('id') for p in original_players_out]}, Filtered OUT IDs: {[p.get('id') for p in filtered_players_out]}")
+            else:
+                filtered_players_in = rec.get('players_in', [])
+            
+            # Build enhanced player lists with stats (using filtered lists)
+            out_players = [get_player_stats(p) for p in filtered_players_out]
+            in_players = [get_player_stats(p) for p in filtered_players_in]
             
             transfer_recommendations["top_suggestion"] = {
-                "num_transfers": to_python_type(rec.get('num_transfers', 0)),
+                "num_transfers": to_python_type(len(filtered_players_out)),
                 "net_ev_gain": to_python_type(rec.get('net_ev_gain', 0)),
                 "players_out": out_players,
                 "players_in": in_players
