@@ -21,24 +21,60 @@ class TransferOptimizer:
         self.free_transfers = 1
         
     def get_current_squad(self, entry_id: int, gameweek: int, api_client, players_df: pd.DataFrame) -> pd.DataFrame:
-        last_played_gw = max(1, gameweek - 1)
-        history = api_client.get_entry_history(entry_id)
-        chips_used = history.get('chips', [])
+        """
+        Get current squad for the specified gameweek.
         
-        free_hit_active = False
-        for chip in chips_used:
-            if chip['event'] == last_played_gw and chip['name'] == 'freehit':
-                free_hit_active = True
-                break
+        If the gameweek is in session (is_current=True), use that gameweek's picks
+        as they reflect transfers made before the deadline.
+        Otherwise, use the last played gameweek's picks.
+        """
+        # Check if the provided gameweek is in session (current)
+        # This is important because picks for the current gameweek reflect transfers
+        # made before the deadline, while last played gameweek's picks may be outdated
+        bootstrap = api_client.get_bootstrap_static(use_cache=True)
+        events = bootstrap.get('events', [])
+        current_event = next((e for e in events if e.get('id') == gameweek), None)
+        is_current = current_event and current_event.get('is_current', False)
         
-        target_picks_gw = max(1, last_played_gw - 1) if free_hit_active else last_played_gw
+        # If gameweek is in session, use its picks (they include recent transfers)
+        if is_current:
+            target_picks_gw = gameweek
+            logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
+        else:
+            # Gameweek is not in session, use last played gameweek
+            last_played_gw = max(1, gameweek - 1)
+            history = api_client.get_entry_history(entry_id)
+            chips_used = history.get('chips', [])
+            
+            free_hit_active = False
+            for chip in chips_used:
+                if chip['event'] == last_played_gw and chip['name'] == 'freehit':
+                    free_hit_active = True
+                    break
+            
+            # If free hit was active, use gameweek before that
+            target_picks_gw = max(1, last_played_gw - 1) if free_hit_active else last_played_gw
+            logger.info(f"Gameweek {gameweek} is not in session, using picks from last played GW{target_picks_gw}")
+        
+        # Try to get picks for the target gameweek
         picks_data = api_client.get_entry_picks(entry_id, target_picks_gw)
         
+        # If picks not available for target gameweek, try the provided gameweek as fallback
         if not picks_data or 'picks' not in picks_data:
-             return pd.DataFrame()
+            if target_picks_gw != gameweek:
+                logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback")
+                picks_data = api_client.get_entry_picks(entry_id, gameweek)
+        
+        if not picks_data or 'picks' not in picks_data:
+            logger.warning(f"No picks data available for entry {entry_id}, gameweek {target_picks_gw}")
+            return pd.DataFrame()
 
         player_ids = [p['element'] for p in picks_data['picks']]
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
+        
+        if not squad_df.empty:
+            logger.info(f"Retrieved squad with {len(squad_df)} players from GW{target_picks_gw}")
+        
         return squad_df
     
     def create_pulp_model(self,
