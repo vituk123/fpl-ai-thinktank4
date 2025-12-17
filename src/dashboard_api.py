@@ -1548,6 +1548,28 @@ async def get_ml_report(
                 current_squad, available_players, bank, free_transfers, max_transfers=4
             )
             
+            # CRITICAL FIX: Filter out GW15 players (Gabriel=5, Caicedo=241) from recommendations
+            # These players were removed before GW16 and should NEVER be in recommendations
+            problem_player_ids = {5, 241}  # Gabriel, Caicedo
+            if smart_recs.get('recommendations'):
+                filtered_recommendations = []
+                for rec in smart_recs['recommendations']:
+                    # Filter out problem players from players_out
+                    original_players_out = rec.get('players_out', [])
+                    filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
+                    
+                    if len(filtered_players_out) < len(original_players_out):
+                        logger.warning(f"ML Report: Removed {len(original_players_out) - len(filtered_players_out)} GW15 players from recommendation. Original: {[p.get('id') for p in original_players_out]}, Filtered: {[p.get('id') for p in filtered_players_out]}")
+                        # Only include recommendation if we still have valid transfers
+                        if len(filtered_players_out) > 0 and len(filtered_players_out) == len(rec.get('players_in', [])):
+                            rec['players_out'] = filtered_players_out
+                            filtered_recommendations.append(rec)
+                    else:
+                        filtered_recommendations.append(rec)
+                
+                smart_recs['recommendations'] = filtered_recommendations
+                logger.info(f"ML Report: Filtered recommendations. Original count: {len(smart_recs.get('recommendations', []))}, Filtered count: {len(filtered_recommendations)}")
+            
             # #region agent log
             try:
                 log_path = r'C:\fpl-api\debug.log'
