@@ -30,7 +30,9 @@ class TransferOptimizer:
         3. If gameweek hasn't started yet (is_next=True), find the most recent finished gameweek
         4. Only fall back to gameweek-1 if none of the above work
         """
-        bootstrap = api_client.get_bootstrap_static(use_cache=True)
+        # CRITICAL: Don't cache bootstrap when checking gameweek status
+        # Cached data may have stale event flags (is_current, finished, is_next)
+        bootstrap = api_client.get_bootstrap_static(use_cache=False)
         events = bootstrap.get('events', [])
         target_event = next((e for e in events if e.get('id') == gameweek), None)
         
