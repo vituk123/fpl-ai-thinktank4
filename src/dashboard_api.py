@@ -1504,9 +1504,12 @@ async def get_ml_report(
             
             # #region agent log
             try:
-                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1250","message":"Before generate_smart_recommendations","data":{"freeTransfers":free_transfers,"bank":bank,"availablePlayersLen":len(available_players),"currentSquadHasEV":'EV' in current_squad.columns},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-            except: pass
+                log_path = r'C:\fpl-api\debug.log'
+                current_squad_player_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+                with open(log_path, 'a') as f:
+                    f.write(json.dumps({"location":"dashboard_api.py:1512","message":"Before generate_smart_recommendations","data":{"gameweek":gameweek,"freeTransfers":free_transfers,"bank":bank,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":current_squad_player_ids,"problemPlayersInSquad":{"Gabriel(5)":5 in current_squad_player_ids,"Caicedo(241)":241 in current_squad_player_ids,"Casemiro(457)":457 in current_squad_player_ids,"Burn(476)":476 in current_squad_player_ids}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+            except Exception as e:
+                logger.error(f"Debug log write failed: {e}")
             # #endregion
             
             smart_recs = optimizer.generate_smart_recommendations(
