@@ -1557,41 +1557,6 @@ async def get_ml_report(
                 current_squad, available_players, bank, free_transfers, max_transfers=4
             )
             
-            # CRITICAL FIX: Filter out GW15 players (Gabriel=5, Caicedo=241) from recommendations
-            # These players were removed before GW16 and should NEVER be in recommendations
-            problem_player_ids = {5, 241}  # Gabriel, Caicedo
-            logger.info(f"ML Report: Starting filter for GW15 players. smart_recs keys: {list(smart_recs.keys())}, has recommendations: {bool(smart_recs.get('recommendations'))}")
-            if smart_recs.get('recommendations'):
-                original_count = len(smart_recs['recommendations'])
-                logger.info(f"ML Report: Filtering {original_count} recommendations for GW15 players")
-                filtered_recommendations = []
-                for idx, rec in enumerate(smart_recs['recommendations']):
-                    # Check if recommendation contains problem players
-                    players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
-                    has_problem_players = bool(players_out_ids.intersection(problem_player_ids))
-                    
-                    logger.info(f"ML Report: Recommendation {idx}: Players OUT IDs: {list(players_out_ids)}, Has problem players: {has_problem_players}")
-                    
-                    if has_problem_players:
-                        logger.error(f"ML Report: SKIPPING recommendation {idx} with GW15 players! Players OUT IDs: {list(players_out_ids)}, Problem IDs found: {list(players_out_ids.intersection(problem_player_ids))}")
-                        # Skip this recommendation entirely - don't include it
-                        continue
-                    else:
-                        filtered_recommendations.append(rec)
-                        logger.info(f"ML Report: Keeping recommendation {idx}")
-                
-                if len(filtered_recommendations) != original_count:
-                    logger.warning(f"ML Report: Filtered out {original_count - len(filtered_recommendations)} recommendations containing GW15 players. Remaining: {len(filtered_recommendations)}")
-                else:
-                    logger.info(f"ML Report: No recommendations filtered. All {original_count} recommendations are valid.")
-                smart_recs['recommendations'] = filtered_recommendations
-                
-                # If no recommendations left, log error
-                if not filtered_recommendations:
-                    logger.error(f"ML Report: CRITICAL - All recommendations contained GW15 players and were filtered out!")
-            else:
-                logger.warning(f"ML Report: No recommendations to filter! smart_recs: {smart_recs}")
-            
             # #region agent log
             try:
                 log_path = r'C:\fpl-api\debug.log'

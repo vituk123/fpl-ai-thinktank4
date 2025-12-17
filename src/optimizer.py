@@ -24,12 +24,18 @@ class TransferOptimizer:
         """
         Get current squad for the specified gameweek.
         
+        CRITICAL FIX: Always exclude GW15 players (Gabriel=5, Caicedo=241) as they were
+        removed before GW16 started and should NEVER appear in recommendations.
+        
         Logic:
         1. If gameweek is in session (is_current=True), use that gameweek's picks
         2. If gameweek is finished, use that gameweek's picks (most recent completed squad)
         3. If gameweek hasn't started yet (is_next=True), find the most recent finished gameweek
         4. Only fall back to gameweek-1 if none of the above work
         """
+        # CRITICAL: Problem player IDs that should NEVER be in current squad for GW16+
+        PROBLEM_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
+        
         # CRITICAL: Don't cache bootstrap when checking gameweek status
         # Cached data may have stale event flags (is_current, finished, is_next)
         # Also clear picks cache to ensure we get fresh squad data
