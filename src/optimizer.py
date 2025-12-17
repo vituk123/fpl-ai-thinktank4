@@ -319,15 +319,28 @@ class TransferOptimizer:
             
         # Extract results
         players_out = []
+        # #region agent log
+        try:
+            log_path = r'C:\fpl-api\debug.log'
+            current_squad_ids_in_optimizer = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"location":"optimizer.py:320","message":"solve_transfer_optimization - current_squad check","data":{"squadSize":len(current_squad),"squadPlayerIds":current_squad_ids_in_optimizer,"problemPlayersInSquad":{"Gabriel(5)":5 in current_squad_ids_in_optimizer,"Caicedo(241)":241 in current_squad_ids_in_optimizer}},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         for pid, var in variables['transfer_out_vars'].items():
             if var.varValue > 0.5:
-                p = current_squad[current_squad['id'] == pid].iloc[0]
+                # Verify player is actually in current_squad
+                player_in_squad = current_squad[current_squad['id'] == pid]
+                if player_in_squad.empty:
+                    logger.error(f"CRITICAL: Player ID {pid} selected for transfer out but NOT in current_squad! Squad IDs: {sorted(current_squad['id'].tolist())}")
+                    continue
+                p = player_in_squad.iloc[0]
                 players_out.append({'name': p['web_name'], 'team': p['team_name'], 'id': p['id'], 'EV': p.get('EV', 0)})
                 # #region agent log
                 try:
                     log_path = r'C:\fpl-api\debug.log'
                     with open(log_path, 'a') as f:
-                        f.write(json.dumps({"location":"optimizer.py:325","message":"Player selected for transfer out","data":{"playerId":pid,"playerName":p['web_name'],"problemPlayer":pid in [5, 241, 457, 476]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                        f.write(json.dumps({"location":"optimizer.py:332","message":"Player selected for transfer out","data":{"playerId":pid,"playerName":p['web_name'],"problemPlayer":pid in [5, 241, 457, 476],"playerInSquad":True},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
                 except: pass
                 # #endregion
                 
