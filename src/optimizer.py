@@ -503,6 +503,18 @@ class TransferOptimizer:
         Returns:
             Dictionary with recommendations, forced transfer info
         """
+        # CRITICAL: Remove GW15 players (Gabriel=5, Caicedo=241) if they somehow got into the squad
+        # These players were removed before GW16 started and should NEVER be in the current squad
+        if not current_squad.empty:
+            problem_players = {5, 241}  # Gabriel, Caicedo
+            squad_ids = set(current_squad['id'])
+            found_problem_players = squad_ids.intersection(problem_players)
+            if found_problem_players:
+                logger.error(f"CRITICAL in generate_smart_recommendations: Found GW15 players in current_squad! Problem IDs: {found_problem_players}, Full squad: {sorted(squad_ids)}")
+                # Remove them immediately
+                current_squad = current_squad[~current_squad['id'].isin(problem_players)].copy()
+                logger.warning(f"Removed problem players. New squad size: {len(current_squad)}, IDs: {sorted(set(current_squad['id']))}")
+        
         # #region agent log
         import json
         try:
@@ -513,6 +525,7 @@ class TransferOptimizer:
             if not current_squad.empty:
                 for idx, row in current_squad.iterrows():
                     player_names[row['id']] = row.get('web_name', 'Unknown')
+            logger.info(f"generate_smart_recommendations entry - Squad size: {len(current_squad)}, Player IDs: {squad_player_ids}, Names: {player_names}")
             with open(log_path, 'a') as f:
                 f.write(json.dumps({"location":"optimizer.py:452","message":"generate_smart_recommendations entry","data":{"squadSize":len(current_squad),"playerIds":squad_player_ids,"playerNames":player_names,"problemPlayers":{"Gabriel(5)":5 in squad_player_ids,"Caicedo(241)":241 in squad_player_ids,"Casemiro(457)":457 in squad_player_ids,"Burn(476)":476 in squad_player_ids}},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except Exception as e:
