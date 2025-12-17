@@ -1472,12 +1472,16 @@ async def get_ml_report(
             if len(merge_columns) > 1:  # More than just 'id'
                 # Log before merge
                 logger.info(f"ML Report: Before merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
-                current_squad = current_squad.merge(
+                # CRITICAL: Use copy() to avoid modifying the original DataFrame
+                current_squad = current_squad.copy().merge(
                     players_df[merge_columns],
                     on='id',
                     how='left',
                     suffixes=('', '_new')
                 )
+                # Verify merge didn't lose rows
+                if len(current_squad) != len(current_squad['id'].unique()):
+                    logger.warning(f"ML Report: Merge may have created duplicate rows! Squad size: {len(current_squad)}, Unique IDs: {len(current_squad['id'].unique())}")
                 # Log after merge
                 logger.info(f"ML Report: After merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
             
