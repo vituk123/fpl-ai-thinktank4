@@ -1511,8 +1511,14 @@ async def get_ml_report(
             try:
                 log_path = r'C:\fpl-api\debug.log'
                 current_squad_player_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+                # Also log player names for verification
+                player_name_map = {}
+                if not current_squad.empty:
+                    for idx, row in current_squad.iterrows():
+                        player_name_map[row['id']] = row.get('web_name', 'Unknown')
+                logger.info(f"ML Report: Before generate_smart_recommendations - Squad size: {len(current_squad)}, Player IDs: {current_squad_player_ids}, Player names: {player_name_map}")
                 with open(log_path, 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1512","message":"Before generate_smart_recommendations","data":{"gameweek":gameweek,"freeTransfers":free_transfers,"bank":bank,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":current_squad_player_ids,"problemPlayersInSquad":{"Gabriel(5)":5 in current_squad_player_ids,"Caicedo(241)":241 in current_squad_player_ids,"Casemiro(457)":457 in current_squad_player_ids,"Burn(476)":476 in current_squad_player_ids}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                    f.write(json.dumps({"location":"dashboard_api.py:1512","message":"Before generate_smart_recommendations","data":{"gameweek":gameweek,"freeTransfers":free_transfers,"bank":bank,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":current_squad_player_ids,"playerNames":player_name_map,"problemPlayersInSquad":{"Gabriel(5)":5 in current_squad_player_ids,"Caicedo(241)":241 in current_squad_player_ids,"Casemiro(457)":457 in current_squad_player_ids,"Burn(476)":476 in current_squad_player_ids}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
             except Exception as e:
                 logger.error(f"Debug log write failed: {e}")
             # #endregion
@@ -1526,8 +1532,10 @@ async def get_ml_report(
                 log_path = r'C:\fpl-api\debug.log'
                 top_rec = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
                 players_out = [p.get('id') for p in top_rec.get('players_out', [])]
+                players_out_names = [p.get('name') for p in top_rec.get('players_out', [])]
+                logger.info(f"ML Report: After generate_smart_recommendations - Top rec players OUT IDs: {players_out}, Names: {players_out_names}")
                 with open(log_path, 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1522","message":"After generate_smart_recommendations","data":{"numRecommendations":len(smart_recs.get('recommendations', [])),"topRecPlayersOut":players_out,"problemPlayersInRec":{"Gabriel(5)":5 in players_out,"Caicedo(241)":241 in players_out,"Casemiro(457)":457 in players_out,"Burn(476)":476 in players_out}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                    f.write(json.dumps({"location":"dashboard_api.py:1522","message":"After generate_smart_recommendations","data":{"numRecommendations":len(smart_recs.get('recommendations', [])),"topRecPlayersOut":players_out,"topRecPlayersOutNames":players_out_names,"problemPlayersInRec":{"Gabriel(5)":5 in players_out,"Caicedo(241)":241 in players_out,"Casemiro(457)":457 in players_out,"Burn(476)":476 in players_out}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
             except Exception as e:
                 logger.error(f"Debug log write failed: {e}")
             # #endregion
