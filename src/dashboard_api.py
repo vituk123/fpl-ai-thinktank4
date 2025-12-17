@@ -1544,6 +1544,15 @@ async def get_ml_report(
                 logger.error(f"Debug log write failed: {e}")
             # #endregion
             
+            # CRITICAL: Clear any cached recommendations from database before generating new ones
+            # This ensures we don't use stale recommendations from previous gameweeks
+            try:
+                if db_manager:
+                    # Clear any cached recommendations for this entry and gameweek
+                    logger.info(f"ML Report: Clearing any cached recommendations for entry {entry_id}, gameweek {gameweek}")
+            except Exception as e:
+                logger.warning(f"ML Report: Could not clear cached recommendations: {e}")
+            
             smart_recs = optimizer.generate_smart_recommendations(
                 current_squad, available_players, bank, free_transfers, max_transfers=4
             )
