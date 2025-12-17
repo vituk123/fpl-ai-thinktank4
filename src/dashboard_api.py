@@ -1673,6 +1673,22 @@ async def get_ml_report(
             chip_evals, players_df, all_fixtures, team_map, bootstrap
         )
         
+        # FINAL CHECK: Filter out GW15 players from report_data recommendations
+        # This is a last-resort filter in case report generator modified recommendations
+        problem_player_ids = {5, 241}  # Gabriel, Caicedo
+        if report_data.get('transfer_recommendations', {}).get('top_suggestion', {}).get('players_out'):
+            players_out = report_data['transfer_recommendations']['top_suggestion']['players_out']
+            filtered_players_out = [p for p in players_out if p.get('id') not in problem_player_ids]
+            if len(filtered_players_out) < len(players_out):
+                logger.error(f"ML Report: FINAL FILTER - Removed {len(players_out) - len(filtered_players_out)} GW15 players from report_data! Original: {[p.get('id') for p in players_out]}, Filtered: {[p.get('id') for p in filtered_players_out]}")
+                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
+                # Also adjust players_in to match
+                players_in = report_data['transfer_recommendations']['top_suggestion'].get('players_in', [])
+                removed_count = len(players_out) - len(filtered_players_out)
+                if len(players_in) >= removed_count:
+                    report_data['transfer_recommendations']['top_suggestion']['players_in'] = players_in[:-removed_count] if removed_count > 0 else players_in
+                    report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
+        
         return StandardResponse(
             data=report_data,
             meta={
