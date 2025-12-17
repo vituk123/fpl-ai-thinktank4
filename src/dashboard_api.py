@@ -1552,34 +1552,27 @@ async def get_ml_report(
             # These players were removed before GW16 and should NEVER be in recommendations
             problem_player_ids = {5, 241}  # Gabriel, Caicedo
             if smart_recs.get('recommendations'):
+                original_count = len(smart_recs['recommendations'])
                 filtered_recommendations = []
                 for rec in smart_recs['recommendations']:
-                    # Filter out problem players from players_out
-                    original_players_out = rec.get('players_out', [])
-                    filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
+                    # Check if recommendation contains problem players
+                    players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
+                    has_problem_players = bool(players_out_ids.intersection(problem_player_ids))
                     
-                    if len(filtered_players_out) < len(original_players_out):
-                        removed_count = len(original_players_out) - len(filtered_players_out)
-                        logger.warning(f"ML Report: Removed {removed_count} GW15 players from recommendation. Original OUT IDs: {[p.get('id') for p in original_players_out]}, Filtered OUT IDs: {[p.get('id') for p in filtered_players_out]}")
-                        # Adjust players_in to match (remove last N players)
-                        original_players_in = rec.get('players_in', [])
-                        if len(original_players_in) >= removed_count:
-                            filtered_players_in = original_players_in[:-removed_count] if removed_count > 0 else original_players_in
-                            # Only include recommendation if we still have valid transfers
-                            if len(filtered_players_out) > 0 and len(filtered_players_out) == len(filtered_players_in):
-                                rec['players_out'] = filtered_players_out
-                                rec['players_in'] = filtered_players_in
-                                rec['num_transfers'] = len(filtered_players_out)
-                                filtered_recommendations.append(rec)
-                                logger.info(f"ML Report: Adjusted recommendation to {len(filtered_players_out)} transfers after removing GW15 players")
-                        else:
-                            logger.warning(f"ML Report: Cannot adjust recommendation - not enough players_in. Skipping this recommendation.")
+                    if has_problem_players:
+                        logger.error(f"ML Report: SKIPPING recommendation with GW15 players! Players OUT IDs: {list(players_out_ids)}, Problem IDs found: {list(players_out_ids.intersection(problem_player_ids))}")
+                        # Skip this recommendation entirely - don't include it
+                        continue
                     else:
                         filtered_recommendations.append(rec)
                 
-                if len(filtered_recommendations) != len(smart_recs.get('recommendations', [])):
-                    logger.warning(f"ML Report: Filtered recommendations. Original count: {len(smart_recs.get('recommendations', []))}, Filtered count: {len(filtered_recommendations)}")
+                if len(filtered_recommendations) != original_count:
+                    logger.warning(f"ML Report: Filtered out {original_count - len(filtered_recommendations)} recommendations containing GW15 players. Remaining: {len(filtered_recommendations)}")
                 smart_recs['recommendations'] = filtered_recommendations
+                
+                # If no recommendations left, log error
+                if not filtered_recommendations:
+                    logger.error(f"ML Report: CRITICAL - All recommendations contained GW15 players and were filtered out!")
             
             # #region agent log
             try:
