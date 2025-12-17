@@ -224,6 +224,17 @@ class TransferOptimizer:
         available_player_ids = set(available_players['id'])
         all_player_ids = current_squad_ids.union(available_player_ids)
         
+        # CRITICAL: Verify no GW15 players (Gabriel=5, Caicedo=241) in current_squad
+        # These players were removed before GW16 started
+        problem_players = {5, 241}  # Gabriel, Caicedo
+        found_problem_players = current_squad_ids.intersection(problem_players)
+        if found_problem_players:
+            logger.error(f"CRITICAL ERROR in create_pulp_model: Found GW15 players in current_squad! Problem player IDs: {found_problem_players}, Full squad IDs: {sorted(current_squad_ids)}")
+            # Remove problem players from current_squad to prevent wrong recommendations
+            current_squad = current_squad[~current_squad['id'].isin(problem_players)].copy()
+            current_squad_ids = set(current_squad['id'])
+            logger.warning(f"Removed problem players from squad. New squad size: {len(current_squad)}, IDs: {sorted(current_squad_ids)}")
+        
         # #region agent log
         try:
             log_path = r'C:\fpl-api\debug.log'
