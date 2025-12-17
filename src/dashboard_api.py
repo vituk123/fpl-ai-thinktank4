@@ -1676,18 +1676,32 @@ async def get_ml_report(
         # FINAL CHECK: Filter out GW15 players from report_data recommendations
         # This is a last-resort filter in case report generator modified recommendations
         problem_player_ids = {5, 241}  # Gabriel, Caicedo
-        if report_data.get('transfer_recommendations', {}).get('top_suggestion', {}).get('players_out'):
-            players_out = report_data['transfer_recommendations']['top_suggestion']['players_out']
-            filtered_players_out = [p for p in players_out if p.get('id') not in problem_player_ids]
-            if len(filtered_players_out) < len(players_out):
-                logger.error(f"ML Report: FINAL FILTER - Removed {len(players_out) - len(filtered_players_out)} GW15 players from report_data! Original: {[p.get('id') for p in players_out]}, Filtered: {[p.get('id') for p in filtered_players_out]}")
-                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
-                # Also adjust players_in to match
-                players_in = report_data['transfer_recommendations']['top_suggestion'].get('players_in', [])
+        top_suggestion = report_data.get('transfer_recommendations', {}).get('top_suggestion', {})
+        if top_suggestion and top_suggestion.get('players_out'):
+            players_out = top_suggestion['players_out']
+            players_out_ids = {p.get('id') for p in players_out}
+            has_problem = bool(players_out_ids.intersection(problem_player_ids))
+            
+            logger.info(f"ML Report: FINAL FILTER CHECK - Players OUT IDs: {list(players_out_ids)}, Has problem players: {has_problem}")
+            
+            if has_problem:
+                filtered_players_out = [p for p in players_out if p.get('id') not in problem_player_ids]
                 removed_count = len(players_out) - len(filtered_players_out)
+                logger.error(f"ML Report: FINAL FILTER - Removed {removed_count} GW15 players from report_data! Original IDs: {[p.get('id') for p in players_out]}, Filtered IDs: {[p.get('id') for p in filtered_players_out]}")
+                
+                # Update the report_data
+                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
+                
+                # Also adjust players_in to match
+                players_in = top_suggestion.get('players_in', [])
                 if len(players_in) >= removed_count:
                     report_data['transfer_recommendations']['top_suggestion']['players_in'] = players_in[:-removed_count] if removed_count > 0 else players_in
                     report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
+                    logger.info(f"ML Report: FINAL FILTER - Adjusted to {len(filtered_players_out)} transfers")
+                else:
+                    logger.warning(f"ML Report: FINAL FILTER - Cannot adjust players_in (not enough players). Keeping original.")
+            else:
+                logger.info(f"ML Report: FINAL FILTER - No GW15 players found in report_data. Recommendations are clean.")
         
         return StandardResponse(
             data=report_data,
