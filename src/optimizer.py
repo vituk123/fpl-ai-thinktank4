@@ -32,6 +32,8 @@ class TransferOptimizer:
         """
         # CRITICAL: Don't cache bootstrap when checking gameweek status
         # Cached data may have stale event flags (is_current, finished, is_next)
+        # Also clear picks cache to ensure we get fresh squad data
+        api_client.clear_cache()
         bootstrap = api_client.get_bootstrap_static(use_cache=False)
         events = bootstrap.get('events', [])
         target_event = next((e for e in events if e.get('id') == gameweek), None)
