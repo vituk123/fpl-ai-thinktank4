@@ -88,6 +88,8 @@ class TransferOptimizer:
             if target_picks_gw != gameweek:
                 logger.warning(f"No picks found for GW{target_picks_gw}, trying GW{gameweek} as fallback")
                 picks_data = api_client.get_entry_picks(entry_id, gameweek)
+                if picks_data and 'picks' in picks_data:
+                    target_picks_gw = gameweek
         
         if not picks_data or 'picks' not in picks_data:
             logger.warning(f"No picks data available for entry {entry_id}, gameweek {target_picks_gw}")
@@ -97,7 +99,9 @@ class TransferOptimizer:
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
         if not squad_df.empty:
-            logger.info(f"Retrieved squad with {len(squad_df)} players from GW{target_picks_gw}")
+            logger.info(f"Retrieved squad with {len(squad_df)} players from GW{target_picks_gw}. Player IDs: {sorted(player_ids)}")
+        else:
+            logger.warning(f"Retrieved empty squad from GW{target_picks_gw}. Player IDs from picks: {player_ids}")
         
         return squad_df
     

@@ -1310,6 +1310,7 @@ async def get_ml_report(
         # Get current squad (like main.py)
         try:
             optimizer = TransferOptimizer(config)
+            logger.info(f"ML Report: Getting current squad for entry {entry_id}, target gameweek {gameweek}")
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
             if current_squad.empty:
                 logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
@@ -1318,6 +1319,7 @@ async def get_ml_report(
             else:
                 current_squad_ids = set(current_squad['id'].tolist())
                 current_squad_teams = set(current_squad['team'].dropna().unique())
+                logger.info(f"ML Report: Retrieved squad with {len(current_squad)} players. Player IDs: {sorted(current_squad_ids)}")
         except Exception as e:
             logger.error(f"Error getting current squad: {e}", exc_info=True)
             # Fallback: try to get picks directly
