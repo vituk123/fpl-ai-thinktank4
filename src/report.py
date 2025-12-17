@@ -617,18 +617,24 @@ class ReportGenerator:
             # These players were removed before GW16 and should NEVER be in recommendations
             problem_player_ids = {5, 241}  # Gabriel, Caicedo
             original_players_out = rec.get('players_out', [])
+            
+            # Log before filtering
+            logger.info(f"Report Generator: BEFORE FILTER - Players OUT IDs: {[p.get('id') for p in original_players_out]}")
+            
             filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
+            
+            # Log after filtering
+            logger.info(f"Report Generator: AFTER FILTER - Players OUT IDs: {[p.get('id') for p in filtered_players_out]}")
             
             if len(filtered_players_out) < len(original_players_out):
                 # Remove corresponding players_in to maintain transfer balance
                 removed_count = len(original_players_out) - len(filtered_players_out)
                 original_players_in = rec.get('players_in', [])
                 filtered_players_in = original_players_in[:-removed_count] if removed_count > 0 and len(original_players_in) >= removed_count else original_players_in[:len(filtered_players_out)]
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.warning(f"Report Generator: Removed {removed_count} GW15 players from recommendations. Original OUT IDs: {[p.get('id') for p in original_players_out]}, Filtered OUT IDs: {[p.get('id') for p in filtered_players_out]}")
             else:
                 filtered_players_in = rec.get('players_in', [])
+                logger.info(f"Report Generator: No GW15 players found. Keeping all {len(original_players_out)} players.")
             
             # Build enhanced player lists with stats (using filtered lists)
             out_players = [get_player_stats(p) for p in filtered_players_out]
