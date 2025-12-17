@@ -125,6 +125,7 @@ class TransferOptimizer:
             logger.info(f"Free hit was active in GW{target_picks_gw + 1}, using picks from GW{target_picks_gw} instead")
         
         # Try to get picks for the target gameweek
+        # CRITICAL: Disable cache to ensure we get fresh picks data
         # #region agent log
         try:
             log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log')
@@ -132,7 +133,7 @@ class TransferOptimizer:
                 f.write(json.dumps({"location":"optimizer.py:84","message":"Before API call for picks","data":{"entry_id":entry_id,"target_picks_gw":target_picks_gw,"gameweek":gameweek},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
         except: pass
         # #endregion
-        picks_data = api_client.get_entry_picks(entry_id, target_picks_gw)
+        picks_data = api_client.get_entry_picks(entry_id, target_picks_gw, use_cache=False)
         
         # #region agent log
         try:
@@ -153,7 +154,7 @@ class TransferOptimizer:
                         f.write(json.dumps({"location":"optimizer.py:97","message":"Trying fallback gameweek","data":{"target_picks_gw":target_picks_gw,"fallback_gameweek":gameweek},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
                 except: pass
                 # #endregion
-                picks_data = api_client.get_entry_picks(entry_id, gameweek)
+                picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
                 if picks_data and 'picks' in picks_data:
                     target_picks_gw = gameweek
                     # #region agent log
