@@ -1588,6 +1588,15 @@ async def get_ml_report(
         # Generate report data (JSON format)
         # Pass all_fixtures (not just current gameweek) so report generator can use next gameweek for updated squad
         # Also pass bootstrap to find next upcoming gameweek using is_next flag
+        # #region agent log
+        logger.info(f"ML Report: Before report generator - current_squad empty: {current_squad.empty}, size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist()) if not current_squad.empty else []}")
+        try:
+            log_path = r'C:\fpl-api\debug.log'
+            squad_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"location":"dashboard_api.py:1570","message":"Before report generator","data":{"currentSquadEmpty":current_squad.empty,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":squad_ids},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
         report_generator = ReportGenerator(config)
         report_data = report_generator.generate_report_data(
             entry_info, gameweek, current_squad, smart_recs['recommendations'],
