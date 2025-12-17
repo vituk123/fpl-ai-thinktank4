@@ -1331,8 +1331,17 @@ async def get_ml_report(
             # #endregion
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
             # CRITICAL: Make a deep copy immediately to prevent any modifications to the original
+            # Also verify the squad contains the correct players
             if not current_squad.empty:
+                squad_ids_before_copy = sorted(current_squad['id'].tolist())
+                logger.info(f"ML Report: Squad from get_current_squad - Size: {len(current_squad)}, Player IDs: {squad_ids_before_copy}")
+                # Verify no problem players
+                if 5 in squad_ids_before_copy or 241 in squad_ids_before_copy:
+                    logger.error(f"ML Report: CRITICAL ERROR - Problem players found in squad from get_current_squad! Gabriel (5): {5 in squad_ids_before_copy}, Caicedo (241): {241 in squad_ids_before_copy}")
                 current_squad = current_squad.copy()
+                squad_ids_after_copy = sorted(current_squad['id'].tolist())
+                if squad_ids_before_copy != squad_ids_after_copy:
+                    logger.error(f"ML Report: CRITICAL ERROR - Squad changed after copy! Before: {squad_ids_before_copy}, After: {squad_ids_after_copy}")
             if current_squad.empty:
                 logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
                 current_squad_ids = set()
