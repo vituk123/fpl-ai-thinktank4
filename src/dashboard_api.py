@@ -1453,8 +1453,10 @@ async def get_ml_report(
         
         if current_squad.empty:
             # If no squad, create empty recommendations
+            logger.warning(f"ML Report: current_squad is EMPTY! Cannot generate recommendations. Entry: {entry_id}, GW: {gameweek}")
             smart_recs = {'recommendations': []}
         else:
+            logger.info(f"ML Report: current_squad is NOT empty. Size: {len(current_squad)}, Player IDs: {sorted(current_squad['id'].tolist())}")
             # Ensure EV column exists in players_df before merging
             if 'EV' not in players_df.columns:
                 if 'ep_next' in players_df.columns:
