@@ -323,6 +323,13 @@ class TransferOptimizer:
             if var.varValue > 0.5:
                 p = current_squad[current_squad['id'] == pid].iloc[0]
                 players_out.append({'name': p['web_name'], 'team': p['team_name'], 'id': p['id'], 'EV': p.get('EV', 0)})
+                # #region agent log
+                try:
+                    log_path = r'C:\fpl-api\debug.log'
+                    with open(log_path, 'a') as f:
+                        f.write(json.dumps({"location":"optimizer.py:325","message":"Player selected for transfer out","data":{"playerId":pid,"playerName":p['web_name'],"problemPlayer":pid in [5, 241, 457, 476]},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+                except: pass
+                # #endregion
                 
         players_in = []
         for pid, var in variables['transfer_in_vars'].items():
