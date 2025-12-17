@@ -1347,8 +1347,9 @@ async def get_ml_report(
         except Exception as e:
             logger.error(f"Error getting current squad: {e}", exc_info=True)
             # Fallback: try to get picks directly
+            # CRITICAL: Use use_cache=False to ensure fresh data
             try:
-                picks_data = await loop.run_in_executor(None, api_client.get_entry_picks, entry_id, gameweek, True)
+                picks_data = await loop.run_in_executor(None, api_client.get_entry_picks, entry_id, gameweek, False)
                 if picks_data and 'picks' in picks_data:
                     player_ids = [p['element'] for p in picks_data['picks']]
                     current_squad = players_df[players_df['id'].isin(player_ids)].copy()
