@@ -72,6 +72,12 @@ class TransferOptimizer:
         elif is_current:
             target_picks_gw = gameweek
             logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
+        
+        # If neither finished nor current, but gameweek >= 16, still try to use it
+        # (handles edge cases where flags might be incorrect)
+        elif gameweek >= 16:
+            target_picks_gw = gameweek
+            logger.info(f"Gameweek {gameweek} >= 16, attempting to use picks from GW{target_picks_gw} (may reflect recent transfers)")
             # #region agent log
             try:
                 with open(r'C:\fpl-api\debug.log', 'a') as f:
