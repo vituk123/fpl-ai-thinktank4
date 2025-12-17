@@ -38,15 +38,17 @@ class TransferOptimizer:
         is_finished = target_event and target_event.get('finished', False)
         is_next = target_event and target_event.get('is_next', False)
         
-        # Priority 1: If gameweek is in session, use its picks (includes recent transfers)
-        if is_current:
-            target_picks_gw = gameweek
-            logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
-        
-        # Priority 2: If gameweek is finished, use its picks (most recent completed squad)
-        elif is_finished:
+        # Priority 1: If gameweek is finished, use its picks (most recent completed squad)
+        # Check finished FIRST because a gameweek can be both is_current and finished
+        # When finished, the picks reflect the final squad after all transfers
+        if is_finished:
             target_picks_gw = gameweek
             logger.info(f"Gameweek {gameweek} is finished, using picks from GW{target_picks_gw} (most recent completed squad)")
+        
+        # Priority 2: If gameweek is in session (not finished), use its picks (includes recent transfers)
+        elif is_current:
+            target_picks_gw = gameweek
+            logger.info(f"Gameweek {gameweek} is in session, using picks from GW{target_picks_gw} (includes transfers made before deadline)")
         
         # Priority 3: If gameweek hasn't started yet, find the most recent finished gameweek
         elif is_next:
