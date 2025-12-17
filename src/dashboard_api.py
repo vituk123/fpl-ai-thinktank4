@@ -1532,33 +1532,35 @@ async def get_ml_report(
                 logger.error(f"Debug log write failed: {e}")
             # #endregion
         
+        # TEMPORARILY DISABLE LEARNING SYSTEM TO DEBUG SQUAD ISSUE
         # Apply learning system if available
-        if ML_ENGINE_AVAILABLE and MLEngine:
-            ml_engine_instance = MLEngine(db_manager, model_version=model_version)
-            if ml_engine_instance.load_model():
-                ml_engine_instance.is_trained = True
-                # #region agent log
-                try:
-                    log_path = r'C:\fpl-api\debug.log'
-                    before_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
-                    players_out_before = [p.get('id') for p in before_learning.get('players_out', [])]
-                    with open(log_path, 'a') as f:
-                        f.write(json.dumps({"location":"dashboard_api.py:1532","message":"Before learning system","data":{"playersOut":players_out_before}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-                except: pass
-                # #endregion
-                smart_recs['recommendations'] = apply_learning_system(
-                    db_manager, api_client, entry_id, gameweek,
-                    smart_recs['recommendations'], ml_engine_instance
-                )
-                # #region agent log
-                try:
-                    log_path = r'C:\fpl-api\debug.log'
-                    after_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
-                    players_out_after = [p.get('id') for p in after_learning.get('players_out', [])]
-                    with open(log_path, 'a') as f:
-                        f.write(json.dumps({"location":"dashboard_api.py:1540","message":"After learning system","data":{"playersOut":players_out_after}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-                except: pass
-                # #endregion
+        # if ML_ENGINE_AVAILABLE and MLEngine:
+        #     ml_engine_instance = MLEngine(db_manager, model_version=model_version)
+        #     if ml_engine_instance.load_model():
+        #         ml_engine_instance.is_trained = True
+        #         # #region agent log
+        #         try:
+        #             log_path = r'C:\fpl-api\debug.log'
+        #             before_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
+        #             players_out_before = [p.get('id') for p in before_learning.get('players_out', [])]
+        #             with open(log_path, 'a') as f:
+        #                 f.write(json.dumps({"location":"dashboard_api.py:1532","message":"Before learning system","data":{"playersOut":players_out_before}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        #         except: pass
+        #         # #endregion
+        #         smart_recs['recommendations'] = apply_learning_system(
+        #             db_manager, api_client, entry_id, gameweek,
+        #             smart_recs['recommendations'], ml_engine_instance
+        #         )
+        #         # #region agent log
+        #         try:
+        #             log_path = r'C:\fpl-api\debug.log'
+        #             after_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
+        #             players_out_after = [p.get('id') for p in after_learning.get('players_out', [])]
+        #             with open(log_path, 'a') as f:
+        #                 f.write(json.dumps({"location":"dashboard_api.py:1540","message":"After learning system","data":{"playersOut":players_out_after}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        #         except: pass
+        #         # #endregion
+        logger.info("Learning system temporarily disabled for debugging")
             ml_engine_instance = MLEngine(db_manager, model_version=model_version)
             if ml_engine_instance.load_model():
                 ml_engine_instance.is_trained = True
