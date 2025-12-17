@@ -1282,6 +1282,13 @@ async def get_ml_report(
             # Use current_event (gameweek in session or latest finished)
             gameweek = current_event.get('id', 1) if current_event else 1
             logger.info(f"ML Report: Using gameweek {gameweek} (is_current: {current_event.get('is_current', False) if current_event else False}, finished: {current_event.get('finished', False) if current_event else False})")
+            # #region agent log
+            import json
+            try:
+                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"location":"dashboard_api.py:1284","message":"ML Report gameweek determination","data":{"gameweek":gameweek,"is_current":current_event.get('is_current', False) if current_event else False,"finished":current_event.get('finished', False) if current_event else False,"is_next":current_event.get('is_next', False) if current_event else False},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
+            except: pass
+            # #endregion
         
         # Load all players with bootstrap data
         bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
@@ -1311,6 +1318,12 @@ async def get_ml_report(
         try:
             optimizer = TransferOptimizer(config)
             logger.info(f"ML Report: Getting current squad for entry {entry_id}, target gameweek {gameweek}")
+            # #region agent log
+            try:
+                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"location":"dashboard_api.py:1313","message":"Before get_current_squad call","data":{"entry_id":entry_id,"gameweek":gameweek},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
+            except: pass
+            # #endregion
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
             if current_squad.empty:
                 logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
@@ -1320,6 +1333,12 @@ async def get_ml_report(
                 current_squad_ids = set(current_squad['id'].tolist())
                 current_squad_teams = set(current_squad['team'].dropna().unique())
                 logger.info(f"ML Report: Retrieved squad with {len(current_squad)} players. Player IDs: {sorted(current_squad_ids)}")
+                # #region agent log
+                try:
+                    with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({"location":"dashboard_api.py:1320","message":"After get_current_squad call","data":{"squad_size":len(current_squad),"player_ids":sorted(list(current_squad_ids))[:15]},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
+                except: pass
+                # #endregion
         except Exception as e:
             logger.error(f"Error getting current squad: {e}", exc_info=True)
             # Fallback: try to get picks directly
