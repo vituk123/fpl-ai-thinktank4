@@ -224,6 +224,15 @@ class TransferOptimizer:
         available_player_ids = set(available_players['id'])
         all_player_ids = current_squad_ids.union(available_player_ids)
         
+        # #region agent log
+        try:
+            log_path = r'C:\fpl-api\debug.log'
+            squad_ids_list = sorted(list(current_squad_ids))
+            with open(log_path, 'a') as f:
+                f.write(json.dumps({"location":"optimizer.py:223","message":"create_pulp_model - current_squad_ids","data":{"squadSize":len(current_squad),"squadPlayerIds":squad_ids_list,"problemPlayers":{"Gabriel(5)":5 in current_squad_ids,"Caicedo(241)":241 in current_squad_ids,"Casemiro(457)":457 in current_squad_ids,"Burn(476)":476 in current_squad_ids}},"timestamp":int(__import__('time').time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
+        except: pass
+        # #endregion
+        
         # Variables
         for pid in all_player_ids:
             final_squad_vars[pid] = pulp.LpVariable(f"in_squad_{pid}", cat='Binary')
