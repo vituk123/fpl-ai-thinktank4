@@ -310,8 +310,16 @@ class TransferOptimizerV2:
                 players_out.append({
                     'name': p['web_name'],
                     'team': p['team_name'],
-                    'id': p['id'],
-                    'EV': p.get('EV', 0)
+                    'id': int(p['id']),
+                    'EV': float(p.get('EV', 0)),
+                    'element_type': int(p.get('element_type', 0)),
+                    'form': float(p.get('form', 0)),
+                    'selected_by_percent': float(p.get('selected_by_percent', 0)),
+                    'points_per_game': float(p.get('points_per_game', 0)),
+                    'now_cost': int(p.get('now_cost', 0)),
+                    'total_points': int(p.get('total_points', 0)),
+                    'photo': p.get('photo', ''),
+                    'fdr': float(p.get('fdr', 3.0)),
                 })
                 logger.info(f"OptimizerV2: [solve_transfer_optimization] Selected {p['web_name']} (ID: {pid}) for transfer out")
         
@@ -327,8 +335,16 @@ class TransferOptimizerV2:
                 players_in.append({
                     'name': p['web_name'],
                     'team': p['team_name'],
-                    'id': p['id'],
-                    'EV': p.get('EV', 0)
+                    'id': int(p['id']),
+                    'EV': float(p.get('EV', 0)),
+                    'element_type': int(p.get('element_type', 0)),
+                    'form': float(p.get('form', 0)),
+                    'selected_by_percent': float(p.get('selected_by_percent', 0)),
+                    'points_per_game': float(p.get('points_per_game', 0)),
+                    'now_cost': int(p.get('now_cost', 0)),
+                    'total_points': int(p.get('total_points', 0)),
+                    'photo': p.get('photo', ''),
+                    'fdr': float(p.get('fdr', 3.0)),
                 })
                 logger.info(f"OptimizerV2: [solve_transfer_optimization] Selected {p['web_name']} (ID: {pid}) for transfer in")
         

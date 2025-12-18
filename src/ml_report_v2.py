@@ -181,6 +181,37 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         # Fallback: use form as proxy for EV
         players_df['EV'] = pd.to_numeric(players_df.get('form', 0), errors='coerce').fillna(0)
     
+    # Step 4.5: Calculate FDR (Fixture Difficulty Rating) for upcoming gameweek
+    try:
+        fixtures_response = requests.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
+        if fixtures_response.status_code == 200:
+            fixtures = fixtures_response.json()
+            # Get upcoming fixtures for the next gameweek
+            next_gw = gameweek + 1
+            upcoming_fixtures = [f for f in fixtures if f.get('event') == next_gw]
+            
+            # Build team FDR map from fixtures
+            team_fdr_map = {}
+            for fixture in upcoming_fixtures:
+                home_team = fixture.get('team_h')
+                away_team = fixture.get('team_a')
+                home_difficulty = fixture.get('team_h_difficulty', 3)
+                away_difficulty = fixture.get('team_a_difficulty', 3)
+                
+                if home_team:
+                    team_fdr_map[home_team] = home_difficulty
+                if away_team:
+                    team_fdr_map[away_team] = away_difficulty
+            
+            # Apply FDR to players DataFrame
+            players_df['fdr'] = players_df['team'].map(lambda t: team_fdr_map.get(int(t), 3.0) if pd.notna(t) else 3.0)
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"FDR calculated", {"teams_with_fdr": len(team_fdr_map), "next_gw": next_gw}, "H2")
+        else:
+            players_df['fdr'] = 3.0  # Default FDR
+    except Exception as e:
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"FDR calculation failed", {"error": str(e)}, "H2")
+        players_df['fdr'] = 3.0  # Default FDR
+    
     # Filter to only players in picks
     current_squad = players_df[players_df['id'].isin(player_ids)].copy()
     
