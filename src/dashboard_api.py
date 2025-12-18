@@ -1511,14 +1511,47 @@ async def get_ml_report(
                     except: pass
                     # #endregion
             
-            return JSONResponse(content={
-                "data": report_data,
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_before_json","message":"About to create JSONResponse","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H5"}) + '\n')
+            except: pass
+            # #endregion
+            
+            # Convert all numpy types to native Python types for JSON serialization
+            import numpy as np
+            def convert_to_native(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: convert_to_native(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_to_native(item) for item in obj]
+                return obj
+            
+            report_data_native = convert_to_native(report_data)
+            
+            response_content = {
+                "data": report_data_native,
                 "meta": {
                     "model_version": model_version,
                     "generated_at": datetime.now().isoformat(),
                     "generator": "v2_simplified"
                 }
-            })
+            }
+            
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_creating_response","message":"Creating JSONResponse","data":{"content_keys": list(response_content.keys())},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H5"}) + '\n')
+            except: pass
+            # #endregion
+            
+            return JSONResponse(content=response_content)
         except HTTPException:
             raise
         except Exception as e:
