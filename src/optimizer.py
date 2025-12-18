@@ -56,89 +56,40 @@ class TransferOptimizer:
         """
         Get current squad for the specified gameweek.
         
-        CRITICAL: Aggressively tries multiple gameweeks to find the correct squad
-        without blocked players.
+        NOTE: Gameweek should be determined by the caller to ensure it's clean.
+        This function simply fetches the squad for the provided gameweek.
         """
-        # Clear all caches
+        # Clear cache to ensure fresh data
         api_client.clear_cache()
-        bootstrap = api_client.get_bootstrap_static(use_cache=False)
-        events = bootstrap.get('events', [])
         
-        # Try multiple gameweeks in priority order
-        gameweeks_to_try = []
+        # Fetch picks for the specified gameweek
+        picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
         
-        # Priority 1: Current gameweek
-        gameweeks_to_try.append(gameweek)
+        if not picks_data or 'picks' not in picks_data:
+            logger.warning(f"No picks data available for entry {entry_id}, gameweek {gameweek}")
+            return pd.DataFrame()
         
-        # Priority 2: Next gameweek (if current is finished)
-        target_event = next((e for e in events if e.get('id') == gameweek), None)
-        if target_event and target_event.get('finished', False):
-            gameweeks_to_try.append(gameweek + 1)
+        player_ids = [p['element'] for p in picks_data['picks']]
         
-        # Priority 3: Most recent finished gameweek
-        finished_events = [e for e in events if e.get('finished', False)]
-        if finished_events:
-            most_recent = max(finished_events, key=lambda x: x.get('id', 0))
-            if most_recent['id'] not in gameweeks_to_try:
-                gameweeks_to_try.append(most_recent['id'])
+        # CRITICAL: Final safety check - verify no blocked players
+        blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
+        if blocked_found:
+            logger.error(f"CRITICAL: GW{gameweek} picks contain blocked players {blocked_found}!")
+            logger.error(f"This should NOT happen - gameweek should have been validated before calling this function!")
+            logger.error(f"Full player IDs: {sorted(player_ids)}")
+            # Remove blocked players as last resort
+            player_ids = [pid for pid in player_ids if pid not in BLOCKED_PLAYER_IDS]
+            logger.warning(f"Removed blocked players. Filtered player IDs: {sorted(player_ids)}")
         
-        # Priority 4: Previous gameweek (but NOT for GW16+ to avoid GW15)
-        if gameweek >= 16:
-            # For GW16+, skip gameweek-1 to avoid GW15 with blocked players
-            logger.info(f"GW{gameweek} >= 16, skipping GW{gameweek-1} to avoid blocked players")
-        elif gameweek - 1 not in gameweeks_to_try and gameweek > 1:
-            gameweeks_to_try.append(gameweek - 1)
+        squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
-        logger.info(f"Will try gameweeks in order: {gameweeks_to_try}")
+        if not squad_df.empty:
+            logger.info(f"Retrieved squad from GW{gameweek} with {len(squad_df)} players")
+            logger.info(f"Player IDs: {sorted(squad_df['id'].tolist())}")
+        else:
+            logger.warning(f"Retrieved empty squad from GW{gameweek}")
         
-        # Try each gameweek until we find one without blocked players
-        for try_gw in gameweeks_to_try:
-            logger.info(f"Attempting to fetch squad from GW{try_gw}...")
-            
-            try:
-                picks_data = api_client.get_entry_picks(entry_id, try_gw, use_cache=False)
-                
-                if not picks_data or 'picks' not in picks_data:
-                    logger.warning(f"No picks data for GW{try_gw}")
-                    continue
-                
-                player_ids = [p['element'] for p in picks_data['picks']]
-                logger.info(f"GW{try_gw} raw picks - Player IDs: {sorted(player_ids)}")
-                blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
-                
-                if blocked_found:
-                    logger.error(f"GW{try_gw} contains blocked players {blocked_found}, trying next gameweek...")
-                    logger.error(f"Full player IDs from GW{try_gw}: {sorted(player_ids)}")
-                    continue
-                
-                # Success - found clean squad
-                squad_df = players_df[players_df['id'].isin(player_ids)].copy()
-                
-                # Final check - verify squad_df doesn't contain blocked players
-                squad_ids_from_df = set(squad_df['id'].tolist()) if not squad_df.empty else set()
-                blocked_in_df = squad_ids_from_df.intersection(BLOCKED_PLAYER_IDS)
-                if blocked_in_df:
-                    logger.error(f"CRITICAL: squad_df contains blocked players {blocked_in_df} even though picks didn't!")
-                    logger.error(f"Squad DF IDs: {sorted(squad_ids_from_df)}")
-                    continue
-                
-                if not squad_df.empty:
-                    logger.info(f"✓ SUCCESS: Found clean squad from GW{try_gw} with {len(squad_df)} players")
-                    logger.info(f"  Player IDs: {sorted(squad_df['id'].tolist())}")
-                    logger.info(f"  Verified: No blocked players in squad")
-                    return squad_df
-                else:
-                    logger.warning(f"Squad DataFrame is empty for GW{try_gw}")
-                    continue
-                    
-            except Exception as e:
-                logger.warning(f"Error fetching GW{try_gw}: {e}")
-                continue
-        
-        # If we get here, all gameweeks failed - return empty and log error
-        logger.error(f"CRITICAL: Could not find valid squad for entry {entry_id} in any gameweek!")
-        logger.error(f"Tried gameweeks: {gameweeks_to_try}")
-        return pd.DataFrame()
+        return squad_df
         
         # CRITICAL: Don't cache bootstrap when checking gameweek status
         # Cached data may have stale event flags (is_current, finished, is_next)
