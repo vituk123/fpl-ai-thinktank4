@@ -543,21 +543,22 @@ class ReportGenerator:
                 hit_gain = best_hit.get('net_ev_gain_adjusted', best_hit.get('net_ev_gain', 0))
                 hit_penalty = best_hit.get('penalty_hits', 0) * 4
                 
-                if hit_gain > no_hit_gain:
+                difference = hit_gain - no_hit_gain
+                if difference >= 5.0:
                     comparison = {
                         "better_option": "hit",
-                        "reason": f"Taking a -{hit_penalty} point hit provides a net gain of {hit_gain:.2f} points, which is {hit_gain - no_hit_gain:.2f} points better than the best no-hit option ({no_hit_gain:.2f} points).",
+                        "reason": f"Taking a -{hit_penalty} point hit provides a net gain of {hit_gain:.2f} points, which is {difference:.2f} points better than the best no-hit option ({no_hit_gain:.2f} points). This exceeds the 5-point threshold, so the hit transfer is recommended.",
                         "hit_net_gain": hit_gain,
                         "no_hit_net_gain": no_hit_gain,
-                        "difference": hit_gain - no_hit_gain
+                        "difference": difference
                     }
                 else:
                     comparison = {
                         "better_option": "no_hit",
-                        "reason": f"The best no-hit option provides {no_hit_gain:.2f} points, which is {no_hit_gain - hit_gain:.2f} points better than taking a -{hit_penalty} point hit ({hit_gain:.2f} points).",
+                        "reason": f"The best no-hit option provides {no_hit_gain:.2f} points, which is {abs(difference):.2f} points better than taking a -{hit_penalty} point hit ({hit_gain:.2f} points). Since the hit transfer is not at least 5 points better, the no-hit option is recommended.",
                         "hit_net_gain": hit_gain,
                         "no_hit_net_gain": no_hit_gain,
-                        "difference": no_hit_gain - hit_gain
+                        "difference": difference
                     }
             elif best_hit and not best_no_hit:
                 comparison = {
@@ -575,8 +576,6 @@ class ReportGenerator:
                     "no_hit_net_gain": best_no_hit.get('net_ev_gain_adjusted', best_no_hit.get('net_ev_gain', 0)),
                     "difference": None
                 }
-            
-            transfer_recommendations["hit_vs_no_hit_comparison"] = comparison
             
             # Helper function to get player stats from players_df
             def get_player_stats(player_dict):
@@ -686,6 +685,37 @@ class ReportGenerator:
             
             transfer_recommendations["hit_vs_no_hit_comparison"] = comparison
             
+            # CRITICAL: Apply 5-point threshold rule for selecting top suggestion
+            # Only choose hit transfer if it's at least 5 points better than best no-hit
+            HIT_THRESHOLD = 5.0
+            top_rec = None
+            
+            if best_no_hit and best_hit:
+                no_hit_gain = best_no_hit.get('net_ev_gain_adjusted', best_no_hit.get('net_ev_gain', 0))
+                hit_gain = best_hit.get('net_ev_gain_adjusted', best_hit.get('net_ev_gain', 0))
+                difference = hit_gain - no_hit_gain
+                
+                if difference >= HIT_THRESHOLD:
+                    # Hit transfer is at least 5 points better - choose it
+                    top_rec = best_hit
+                    logger.info(f"ReportGenerator: Hit transfer selected (difference: {difference:.2f} >= {HIT_THRESHOLD})")
+                else:
+                    # Hit transfer is not 5 points better - choose no-hit
+                    top_rec = best_no_hit
+                    logger.info(f"ReportGenerator: No-hit transfer selected (difference: {difference:.2f} < {HIT_THRESHOLD})")
+            elif best_no_hit:
+                # Only no-hit available
+                top_rec = best_no_hit
+                logger.info("ReportGenerator: No-hit transfer selected (only option available)")
+            elif best_hit:
+                # Only hit available (forced transfers)
+                top_rec = best_hit
+                logger.info("ReportGenerator: Hit transfer selected (only option available)")
+            else:
+                # Fallback to original top recommendation
+                top_rec = recommendations[0] if recommendations else None
+                logger.warning("ReportGenerator: Using fallback recommendation")
+            
             # Helper to build recommendation dict
             BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
             def build_rec_dict(rec_data):
@@ -709,9 +739,9 @@ class ReportGenerator:
             if best_hit:
                 transfer_recommendations["best_hit"] = build_rec_dict(best_hit)
             
-            # Top suggestion is the overall best (highest net_ev_gain_adjusted)
-            rec = recommendations[0]  # Already sorted by net_ev_gain_adjusted
-            transfer_recommendations["top_suggestion"] = build_rec_dict(rec)
+            # Top suggestion based on 5-point threshold rule
+            if top_rec:
+                transfer_recommendations["top_suggestion"] = build_rec_dict(top_rec)
         
         # Updated Squad After Transfers
         updated_squad = {
