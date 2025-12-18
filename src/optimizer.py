@@ -103,18 +103,29 @@ class TransferOptimizer:
                     continue
                 
                 player_ids = [p['element'] for p in picks_data['picks']]
+                logger.info(f"GW{try_gw} raw picks - Player IDs: {sorted(player_ids)}")
                 blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
                 
                 if blocked_found:
-                    logger.warning(f"GW{try_gw} contains blocked players {blocked_found}, trying next gameweek...")
+                    logger.error(f"GW{try_gw} contains blocked players {blocked_found}, trying next gameweek...")
+                    logger.error(f"Full player IDs from GW{try_gw}: {sorted(player_ids)}")
                     continue
                 
                 # Success - found clean squad
                 squad_df = players_df[players_df['id'].isin(player_ids)].copy()
                 
+                # Final check - verify squad_df doesn't contain blocked players
+                squad_ids_from_df = set(squad_df['id'].tolist()) if not squad_df.empty else set()
+                blocked_in_df = squad_ids_from_df.intersection(BLOCKED_PLAYER_IDS)
+                if blocked_in_df:
+                    logger.error(f"CRITICAL: squad_df contains blocked players {blocked_in_df} even though picks didn't!")
+                    logger.error(f"Squad DF IDs: {sorted(squad_ids_from_df)}")
+                    continue
+                
                 if not squad_df.empty:
                     logger.info(f"✓ SUCCESS: Found clean squad from GW{try_gw} with {len(squad_df)} players")
-                    logger.info(f"  Player IDs: {sorted(player_ids)[:10]}...")
+                    logger.info(f"  Player IDs: {sorted(squad_df['id'].tolist())}")
+                    logger.info(f"  Verified: No blocked players in squad")
                     return squad_df
                 else:
                     logger.warning(f"Squad DataFrame is empty for GW{try_gw}")
