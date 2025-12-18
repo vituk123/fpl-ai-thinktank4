@@ -1716,8 +1716,9 @@ async def get_ml_report(
         except: pass
         # #endregion
         report_generator = ReportGenerator(config)
+        # Use determined_gameweek (the clean one) instead of original gameweek
         report_data = report_generator.generate_report_data(
-            entry_info, gameweek, current_squad, final_recommendations,
+            entry_info, determined_gameweek, current_squad, final_recommendations,
             chip_evals, players_df, all_fixtures, team_map, bootstrap
         )
         
