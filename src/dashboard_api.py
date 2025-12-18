@@ -38,8 +38,19 @@ except ImportError:
     def apply_learning_system(*args, **kwargs):
         return kwargs.get('recommendations', []) if 'recommendations' in kwargs else []
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging to write to both console and file
+import os
+log_file_path = r'C:\fpl-api\debug.log'
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file_path, mode='a', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
+logger.info("Dashboard API logger initialized")
 
 # Initialize FastAPI app
 app = FastAPI(
