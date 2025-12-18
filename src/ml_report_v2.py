@@ -242,29 +242,61 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             entry_info = entry_response.json()
             bank = entry_info.get('last_deadline_bank', 0) / 10.0
             
+            # Calculate free transfers based on history
             # SPECIAL CASE: Before GW15, all FPL accounts were given 5 free transfers
-            # For GW15 and later, check if we're in that period
-            if gameweek >= 15:
-                # GW15+ - everyone got 5 free transfers before GW15 deadline
-                free_transfers = 5
-                debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Using GW15+ free transfers", {"free_transfers": free_transfers, "gameweek": gameweek}, "H2")
-            else:
-                # Before GW15 - normal free transfer logic
-                # Try to get from entry history
-                try:
-                    history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
-                    if history_response.status_code == 200:
-                        history = history_response.json()
-                        current_event = next((e for e in history.get('current', []) if e.get('event') == gameweek - 1), None)
-                        if current_event:
-                            free_transfers = current_event.get('event_transfers', 0) + 1
-                            free_transfers = min(free_transfers, 2)  # Cap at 2 for normal weeks
+            # For GW15+, calculate based on actual usage
+            try:
+                history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
+                if history_response.status_code == 200:
+                    history = history_response.json()
+                    previous_event = next((e for e in history.get('current', []) if e.get('event') == gameweek - 1), None)
+                    
+                    if gameweek >= 15:
+                        # GW15+ - everyone got 5 free transfers before GW15 deadline
+                        # Calculate remaining: start with 5, subtract transfers used, add 1 per week
+                        if previous_event:
+                            transfers_used = previous_event.get('event_transfers', 0)
+                            # If they used transfers, they get 1 free for next week
+                            # If they didn't use any, they get +1 (up to max of 5 for GW15+)
+                            if transfers_used == 0:
+                                # Didn't use any - check if they had less than 5
+                                # For simplicity, assume they had 5 before GW15, so they still have 5
+                                free_transfers = 5
+                            else:
+                                # Used some transfers - they get 1 free for next week
+                                # But if they had 5 and used some, they might have more left
+                                # Calculate: if cost was 0, all were free, so remaining = 5 - transfers_used + 1
+                                transfer_cost = previous_event.get('event_transfers_cost', 0)
+                                if transfer_cost == 0:
+                                    # All transfers were free, so they had at least that many
+                                    # Assume they started with 5 (GW15 reset), used some, get 1 more
+                                    free_transfers = max(1, 5 - transfers_used + 1)
+                                    free_transfers = min(free_transfers, 5)  # Cap at 5 for GW15+
+                                else:
+                                    # Some were hits, so they used all free transfers
+                                    free_transfers = 1
+                        else:
+                            # No previous event data, default to 5 for GW15+
+                            free_transfers = 5
+                    else:
+                        # Before GW15 - normal free transfer logic
+                        if previous_event:
+                            transfers_used = previous_event.get('event_transfers', 0)
+                            if transfers_used == 0:
+                                free_transfers = min(2, 1 + 1)  # +1 for not using, cap at 2
+                            else:
+                                free_transfers = 1
                         else:
                             free_transfers = 1
-                    else:
-                        free_transfers = 1
-                except:
-                    free_transfers = 1
+                else:
+                    # Fallback: use 5 for GW15+, 1 otherwise
+                    free_transfers = 5 if gameweek >= 15 else 1
+            except Exception as e:
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Error calculating free transfers", {"error": str(e), "gameweek": gameweek}, "H2")
+                # Fallback: use 5 for GW15+, 1 otherwise
+                free_transfers = 5 if gameweek >= 15 else 1
+            
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Calculated free transfers", {"free_transfers": free_transfers, "gameweek": gameweek}, "H2")
         else:
             entry_info = {}
             bank = 0.0
