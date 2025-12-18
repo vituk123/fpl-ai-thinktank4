@@ -1385,7 +1385,7 @@ async def get_ml_report(
             # Get current squad using the determined gameweek
             try:
                 optimizer = TransferOptimizer(config)
-                logger.info(f"ML Report: Getting current squad for entry {entry_id}, determined gameweek {determined_gameweek}")
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Getting current squad for entry {entry_id}, determined gameweek {determined_gameweek}")
             # #region agent log
             try:
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
@@ -1393,6 +1393,18 @@ async def get_ml_report(
             except: pass
             # #endregion
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, determined_gameweek, api_client, players_df)
+            
+            # CRITICAL: Log squad immediately after retrieval
+            if not current_squad.empty:
+                squad_ids_after_retrieval = set(current_squad['id'].tolist())
+                blocked_after_retrieval = squad_ids_after_retrieval.intersection(blocked_players)
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Squad retrieved - Size: {len(current_squad)}, Player IDs: {sorted(squad_ids_after_retrieval)}")
+                if blocked_after_retrieval:
+                    logger.error(f"ML Report: [SQUAD RETRIEVAL] CRITICAL - Blocked players {blocked_after_retrieval} found in squad after retrieval!")
+                else:
+                    logger.info(f"ML Report: [SQUAD RETRIEVAL] ✓ Squad is clean after retrieval")
+            else:
+                logger.warning(f"ML Report: [SQUAD RETRIEVAL] Empty squad returned!")
             
             # CRITICAL VERIFICATION: Check for blocked players
             blocked_players = {5, 241}  # Gabriel, Caicedo

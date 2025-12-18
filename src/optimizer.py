@@ -59,6 +59,8 @@ class TransferOptimizer:
         NOTE: Gameweek should be determined by the caller to ensure it's clean.
         This function simply fetches the squad for the provided gameweek.
         """
+        logger.info(f"Optimizer: [get_current_squad] Entry {entry_id}, Gameweek {gameweek}")
+        
         # Clear cache to ensure fresh data
         api_client.clear_cache()
         
@@ -66,28 +68,37 @@ class TransferOptimizer:
         picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
         
         if not picks_data or 'picks' not in picks_data:
-            logger.warning(f"No picks data available for entry {entry_id}, gameweek {gameweek}")
+            logger.warning(f"Optimizer: [get_current_squad] No picks data available for entry {entry_id}, gameweek {gameweek}")
             return pd.DataFrame()
         
         player_ids = [p['element'] for p in picks_data['picks']]
+        logger.info(f"Optimizer: [get_current_squad] GW{gameweek} raw picks - Player IDs: {sorted(player_ids)}")
         
         # CRITICAL: Final safety check - verify no blocked players
         blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
         if blocked_found:
-            logger.error(f"CRITICAL: GW{gameweek} picks contain blocked players {blocked_found}!")
-            logger.error(f"This should NOT happen - gameweek should have been validated before calling this function!")
-            logger.error(f"Full player IDs: {sorted(player_ids)}")
+            logger.error(f"Optimizer: [get_current_squad] CRITICAL - GW{gameweek} picks contain blocked players {blocked_found}!")
+            logger.error(f"Optimizer: [get_current_squad] This should NOT happen - gameweek should have been validated before calling this function!")
+            logger.error(f"Optimizer: [get_current_squad] Full player IDs: {sorted(player_ids)}")
             # Remove blocked players as last resort
             player_ids = [pid for pid in player_ids if pid not in BLOCKED_PLAYER_IDS]
-            logger.warning(f"Removed blocked players. Filtered player IDs: {sorted(player_ids)}")
+            logger.warning(f"Optimizer: [get_current_squad] Removed blocked players. Filtered player IDs: {sorted(player_ids)}")
         
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
+        # Final verification
+        squad_ids_from_df = set(squad_df['id'].tolist()) if not squad_df.empty else set()
+        blocked_in_df = squad_ids_from_df.intersection(BLOCKED_PLAYER_IDS)
+        if blocked_in_df:
+            logger.error(f"Optimizer: [get_current_squad] CRITICAL - squad_df contains blocked players {blocked_in_df}!")
+            squad_df = squad_df[~squad_df['id'].isin(BLOCKED_PLAYER_IDS)].copy()
+            logger.error(f"Optimizer: [get_current_squad] Force-removed from DataFrame. New size: {len(squad_df)}")
+        
         if not squad_df.empty:
-            logger.info(f"Retrieved squad from GW{gameweek} with {len(squad_df)} players")
-            logger.info(f"Player IDs: {sorted(squad_df['id'].tolist())}")
+            logger.info(f"Optimizer: [get_current_squad] ✓ Retrieved squad from GW{gameweek} with {len(squad_df)} players")
+            logger.info(f"Optimizer: [get_current_squad] Final Player IDs: {sorted(squad_df['id'].tolist())}")
         else:
-            logger.warning(f"Retrieved empty squad from GW{gameweek}")
+            logger.warning(f"Optimizer: [get_current_squad] Retrieved empty squad from GW{gameweek}")
         
         return squad_df
         
