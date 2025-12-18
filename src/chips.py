@@ -160,7 +160,7 @@ class ChipEvaluator:
         
         Returns: DataFrame with 15 players (11 starters + 4 bench)
         """
-        from utils import price_from_api
+        from .utils import price_from_api
         
         # Filter available players (exclude injured/unavailable)
         available = all_players[
@@ -291,7 +291,7 @@ class ChipEvaluator:
         """
         Evaluate Free Hit chip and build optimal squad.
         """
-        from utils import price_from_api
+        from .utils import price_from_api
         
         # Calculate total budget (current squad value + bank)
         current_squad_value = current_squad['now_cost'].apply(price_from_api).sum()
@@ -333,7 +333,7 @@ class ChipEvaluator:
         Evaluate Wildcard chip and build optimal squad.
         Similar to Free Hit but for permanent squad changes.
         """
-        from utils import price_from_api
+        from .utils import price_from_api
         
         # Calculate total budget (current squad value + bank)
         current_squad_value = current_squad['now_cost'].apply(price_from_api).sum()

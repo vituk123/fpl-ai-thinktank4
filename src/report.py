@@ -165,7 +165,7 @@ class ReportGenerator:
     
     def _generate_updated_squad_section(self, current_squad: pd.DataFrame, recommendation: Dict, all_players: pd.DataFrame, fixtures: List[Dict], team_map: Dict) -> str:
         """Generate updated squad section after transfers."""
-        from utils import price_from_api
+        from .utils import price_from_api
         
         if not recommendation:
             return ""
@@ -285,7 +285,7 @@ class ReportGenerator:
     
     def _generate_free_hit_squad(self, squad: pd.DataFrame, starting_xi: pd.DataFrame) -> str:
         """Generate Free Hit squad section."""
-        from utils import price_from_api
+        from .utils import price_from_api
         
         if squad.empty:
             return "\n\n**Free Hit Squad:** Could not generate optimal squad.\n"

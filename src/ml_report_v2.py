@@ -22,13 +22,28 @@ if platform.system() == 'Windows':
 else:
     DEBUG_LOG_PATH = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
 
+def convert_numpy(obj):
+    """Convert numpy types to Python native types for JSON serialization"""
+    import numpy as np
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy(item) for item in obj]
+    return obj
+
 def debug_log(location: str, message: str, data: dict = None, hypothesis_id: str = "V2"):
     """Write debug log to file"""
     try:
         log_entry = {
             "location": location,
             "message": message,
-            "data": data or {},
+            "data": convert_numpy(data) if data else {},
             "timestamp": int(datetime.now().timestamp() * 1000),
             "sessionId": "debug-session",
             "runId": "v2-debug",
