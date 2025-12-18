@@ -1735,9 +1735,29 @@ async def get_ml_report(
             except Exception as e:
                 logger.warning(f"ML Report: Could not clear cached recommendations: {e}")
             
+            # HARD FILTER: Remove blocked players from current_squad before optimization
+            blocked_player_ids = {5, 241}
+            original_squad_size = len(current_squad)
+            current_squad = current_squad[~current_squad['id'].isin(blocked_player_ids)].copy()
+            if len(current_squad) < original_squad_size:
+                logger.error(f"ML Report: [OPTIMIZATION] HARD FILTER - Removed {original_squad_size - len(current_squad)} blocked players from squad before optimization!")
+            
             smart_recs = optimizer.generate_smart_recommendations(
                 current_squad, available_players, bank, free_transfers, max_transfers=4
             )
+            
+            # HARD FILTER: Remove blocked players from recommendations after generation
+            blocked_player_ids = {5, 241}
+            for rec in smart_recs.get('recommendations', []):
+                original_out = len(rec.get('players_out', []))
+                original_in = len(rec.get('players_in', []))
+                
+                rec['players_out'] = [p for p in rec.get('players_out', []) if p.get('id') not in blocked_player_ids]
+                rec['players_in'] = [p for p in rec.get('players_in', []) if p.get('id') not in blocked_player_ids]
+                
+                if len(rec['players_out']) < original_out or len(rec['players_in']) < original_in:
+                    logger.error(f"ML Report: [OPTIMIZATION] HARD FILTER - Removed blocked players from recommendation!")
+                    rec['num_transfers'] = len(rec['players_out'])
             
             # #region agent log
             try:
