@@ -19,6 +19,7 @@ from .api_football_client import APIFootballClient
 from .visualization_dashboard import VisualizationDashboard
 from .live_tracker import LiveGameweekTracker
 from .optimizer import TransferOptimizer
+from .optimizer_v2 import TransferOptimizerV2
 from .projections import ProjectionEngine
 from .eo import EOCalculator
 import pandas as pd
@@ -1414,9 +1415,10 @@ async def get_ml_report(
         # #endregion
         
             # Get current squad using the determined gameweek (gameweek is already determined by determine_clean_gameweek)
+            # USING REWRITTEN OPTIMIZER V2
             try:
-                optimizer = TransferOptimizer(config)
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Getting current squad for entry {entry_id}, gameweek {gameweek}")
+                optimizer = TransferOptimizerV2(config)
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Using OptimizerV2 - Getting current squad for entry {entry_id}, gameweek {gameweek}")
             # #region agent log
             try:
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
