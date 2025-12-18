@@ -1420,10 +1420,10 @@ async def get_ml_report(
             # #region agent log
             try:
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1313","message":"Before get_current_squad call","data":{"entry_id":entry_id,"determined_gameweek":determined_gameweek,"original_gameweek":gameweek},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
+                    f.write(json.dumps({"location":"dashboard_api.py:1313","message":"Before get_current_squad call","data":{"entry_id":entry_id,"gameweek":gameweek},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
             except: pass
             # #endregion
-            current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, determined_gameweek, api_client, players_df)
+            current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
             
             # CRITICAL: Log squad immediately after retrieval
             if not current_squad.empty:
