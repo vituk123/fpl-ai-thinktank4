@@ -2035,7 +2035,25 @@ async def get_ml_report(
                         response.data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
                         response.data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
         
-        return response
+        # Convert StandardResponse to dict and return as JSONResponse (middleware will also filter)
+        response_dict = response.dict() if hasattr(response, 'dict') else (response if isinstance(response, dict) else response.__dict__)
+        
+        # ONE MORE ABSOLUTE FINAL FILTER before JSONResponse
+        if isinstance(response_dict, dict) and 'data' in response_dict:
+            data_final = response_dict['data']
+            if 'transfer_recommendations' in data_final:
+                top_sug_final = data_final['transfer_recommendations'].get('top_suggestion', {})
+                if top_sug_final and 'players_out' in top_sug_final:
+                    players_out_final = top_sug_final['players_out']
+                    filtered_final = [p for p in players_out_final if p.get('id') not in problem_player_ids]
+                    if len(filtered_final) < len(players_out_final):
+                        logger.error(f"ML Report: [ABSOLUTE FINAL BEFORE JSONResponse] Removing {len(players_out_final) - len(filtered_final)} blocked players!")
+                        data_final['transfer_recommendations']['top_suggestion']['players_out'] = filtered_final
+                        data_final['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_final)
+                        response_dict['data'] = data_final
+        
+        logger.info(f"ML Report: [RETURN] Returning JSONResponse")
+        return JSONResponse(content=response_dict)
     except HTTPException:
         raise
     except Exception as e:
