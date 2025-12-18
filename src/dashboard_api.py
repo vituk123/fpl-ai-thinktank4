@@ -1411,57 +1411,6 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
     logger.error(f"ML Report: [GAMEWEEK DETERMINATION] ========== WARNING: USING FALLBACK GAMEWEEK ==========")
     return initial_gameweek
 
-@app.get("/api/v1/ml/report/v2")
-async def get_ml_report_v2(
-    entry_id: int = Query(..., description="FPL entry ID (required)"),
-    model_version: str = Query("v4.6", description="ML model version")
-):
-    """Get ML report using simplified V2 generator (rewritten from scratch)"""
-    logger.info(f"ML Report V2 Endpoint: ========== V2 ENDPOINT CALLED ==========")
-    logger.info(f"ML Report V2 Endpoint: Entry ID: {entry_id}, Model Version: {model_version}")
-    
-    try:
-        from .ml_report_v2 import generate_ml_report_v2
-        import asyncio
-        loop = asyncio.get_event_loop()
-        logger.info(f"ML Report V2 Endpoint: Calling generate_ml_report_v2...")
-        report_data = await loop.run_in_executor(None, generate_ml_report_v2, entry_id, model_version)
-        logger.info(f"ML Report V2 Endpoint: V2 generator returned data")
-        
-        if 'error' in report_data:
-            logger.error(f"ML Report V2 Endpoint: V2 generator returned error: {report_data['error']}")
-            raise HTTPException(status_code=500, detail=report_data['error'])
-        
-        # Check if blocked players are in the response
-        if 'transfer_recommendations' in report_data:
-            top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
-            if top_sug and 'players_out' in top_sug:
-                players_out = top_sug['players_out']
-                player_ids = [p.get('id') for p in players_out]
-                blocked = set(player_ids).intersection({5, 241})
-                if blocked:
-                    logger.error(f"ML Report V2 Endpoint: ❌❌❌ V2 GENERATOR RETURNED BLOCKED PLAYERS: {blocked} ❌❌❌")
-                    logger.error(f"ML Report V2 Endpoint: Player IDs: {player_ids}")
-                else:
-                    logger.info(f"ML Report V2 Endpoint: ✅ V2 generator returned clean data")
-        
-        logger.info(f"ML Report V2 Endpoint: Returning V2 response")
-        return JSONResponse(content={
-            "data": report_data,
-            "meta": {
-                "model_version": model_version,
-                "generated_at": datetime.now().isoformat(),
-                "generator": "v2_simplified"
-            }
-        })
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"ML Report V2 Endpoint error: {e}", exc_info=True)
-        import traceback
-        logger.error(f"ML Report V2 Endpoint traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"V2 generator failed: {str(e)}")
-
 @app.get("/api/v1/ml/report")
 async def get_ml_report(
     entry_id: int = Query(..., description="FPL entry ID (required)"),
