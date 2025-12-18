@@ -196,6 +196,66 @@ const Recommendations: React.FC = () => {
             )}
           </div>
 
+          {/* Hit vs No-Hit Comparison */}
+          {report.transfer_recommendations.hit_vs_no_hit_comparison && (
+            <div>
+              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Hit vs No-Hit Comparison</h2>
+              <div className={`p-4 border-2 rounded ${
+                report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' 
+                  ? 'bg-green-50 border-green-300' 
+                  : 'bg-blue-50 border-blue-300'
+              }`}>
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="text-2xl">
+                    {report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' ? '✅' : '💡'}
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold mb-1">
+                      {report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' 
+                        ? 'Hit Transfer is Better' 
+                        : 'No-Hit Transfer is Better'}
+                    </p>
+                    <p className="text-xs opacity-80">
+                      {report.transfer_recommendations.hit_vs_no_hit_comparison.reason}
+                    </p>
+                  </div>
+                </div>
+                
+                {report.transfer_recommendations.hit_vs_no_hit_comparison.hit_net_gain !== null && 
+                 report.transfer_recommendations.hit_vs_no_hit_comparison.no_hit_net_gain !== null && (
+                  <div className="grid grid-cols-2 gap-4 mt-3 text-xs">
+                    <div className="bg-white p-2 border border-gray-300 rounded">
+                      <p className="font-bold mb-1">Best No-Hit Option:</p>
+                      <p className="text-green-600 font-mono">{report.transfer_recommendations.hit_vs_no_hit_comparison.no_hit_net_gain.toFixed(2)} points</p>
+                      {report.transfer_recommendations.best_no_hit && (
+                        <p className="mt-1 opacity-70">
+                          {report.transfer_recommendations.best_no_hit.num_transfers} transfer(s)
+                        </p>
+                      )}
+                    </div>
+                    <div className="bg-white p-2 border border-gray-300 rounded">
+                      <p className="font-bold mb-1">Best Hit Option:</p>
+                      <p className="text-orange-600 font-mono">{report.transfer_recommendations.hit_vs_no_hit_comparison.hit_net_gain.toFixed(2)} points</p>
+                      {report.transfer_recommendations.best_hit && (
+                        <p className="mt-1 opacity-70">
+                          {report.transfer_recommendations.best_hit.num_transfers} transfer(s) (-{report.transfer_recommendations.best_hit.penalty_hits * 4} pts)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {report.transfer_recommendations.hit_vs_no_hit_comparison.difference !== null && (
+                  <div className="mt-3 p-2 bg-white border border-gray-300 rounded">
+                    <p className="text-xs font-bold">
+                      Difference: <span className="font-mono text-green-600">+{report.transfer_recommendations.hit_vs_no_hit_comparison.difference.toFixed(2)} points</span> in favor of {report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' ? 'hit transfer' : 'no-hit transfer'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Transfer In vs Transfer Out Comparison */}
           {report.transfer_recommendations.top_suggestion && 
            report.transfer_recommendations.top_suggestion.players_out.length > 0 &&

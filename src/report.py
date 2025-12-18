@@ -512,11 +512,71 @@ class ReportGenerator:
         
         # Transfer Recommendations
         transfer_recommendations = {
-            "top_suggestion": None
+            "top_suggestion": None,
+            "best_no_hit": None,
+            "best_hit": None,
+            "hit_vs_no_hit_comparison": None
         }
         
         if recommendations and len(recommendations) > 0:
-            rec = recommendations[0]
+            # Find best no-hit and best hit recommendations
+            best_no_hit = None
+            best_hit = None
+            
+            for rec in recommendations:
+                penalty_hits = rec.get('penalty_hits', 0)
+                net_ev_gain_adjusted = rec.get('net_ev_gain_adjusted', rec.get('net_ev_gain', 0))
+                
+                if penalty_hits == 0:
+                    # No-hit recommendation
+                    if best_no_hit is None or net_ev_gain_adjusted > best_no_hit.get('net_ev_gain_adjusted', best_no_hit.get('net_ev_gain', 0)):
+                        best_no_hit = rec
+                else:
+                    # Hit recommendation
+                    if best_hit is None or net_ev_gain_adjusted > best_hit.get('net_ev_gain_adjusted', best_hit.get('net_ev_gain', 0)):
+                        best_hit = rec
+            
+            # Compare hit vs no-hit
+            comparison = None
+            if best_no_hit and best_hit:
+                no_hit_gain = best_no_hit.get('net_ev_gain_adjusted', best_no_hit.get('net_ev_gain', 0))
+                hit_gain = best_hit.get('net_ev_gain_adjusted', best_hit.get('net_ev_gain', 0))
+                hit_penalty = best_hit.get('penalty_hits', 0) * 4
+                
+                if hit_gain > no_hit_gain:
+                    comparison = {
+                        "better_option": "hit",
+                        "reason": f"Taking a -{hit_penalty} point hit provides a net gain of {hit_gain:.2f} points, which is {hit_gain - no_hit_gain:.2f} points better than the best no-hit option ({no_hit_gain:.2f} points).",
+                        "hit_net_gain": hit_gain,
+                        "no_hit_net_gain": no_hit_gain,
+                        "difference": hit_gain - no_hit_gain
+                    }
+                else:
+                    comparison = {
+                        "better_option": "no_hit",
+                        "reason": f"The best no-hit option provides {no_hit_gain:.2f} points, which is {no_hit_gain - hit_gain:.2f} points better than taking a -{hit_penalty} point hit ({hit_gain:.2f} points).",
+                        "hit_net_gain": hit_gain,
+                        "no_hit_net_gain": no_hit_gain,
+                        "difference": no_hit_gain - hit_gain
+                    }
+            elif best_hit and not best_no_hit:
+                comparison = {
+                    "better_option": "hit",
+                    "reason": "Only hit transfer options are available. No free transfer options found.",
+                    "hit_net_gain": best_hit.get('net_ev_gain_adjusted', best_hit.get('net_ev_gain', 0)),
+                    "no_hit_net_gain": None,
+                    "difference": None
+                }
+            elif best_no_hit and not best_hit:
+                comparison = {
+                    "better_option": "no_hit",
+                    "reason": "No hit transfer options are available. All recommendations use free transfers only.",
+                    "hit_net_gain": None,
+                    "no_hit_net_gain": best_no_hit.get('net_ev_gain_adjusted', best_no_hit.get('net_ev_gain', 0)),
+                    "difference": None
+                }
+            
+            transfer_recommendations["hit_vs_no_hit_comparison"] = comparison
             
             # Helper function to get player stats from players_df
             def get_player_stats(player_dict):
@@ -624,28 +684,34 @@ class ReportGenerator:
                     "fdr": fdr
                 }
             
-            # CRITICAL: Filter out blocked players before building enhanced lists
+            transfer_recommendations["hit_vs_no_hit_comparison"] = comparison
+            
+            # Helper to build recommendation dict
             BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
-            filtered_players_out = [p for p in rec.get('players_out', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
-            filtered_players_in = [p for p in rec.get('players_in', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
+            def build_rec_dict(rec_data):
+                filtered_out = [p for p in rec_data.get('players_out', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
+                filtered_in = [p for p in rec_data.get('players_in', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
+                return {
+                    "num_transfers": to_python_type(len(filtered_out)),
+                    "net_ev_gain": to_python_type(rec_data.get('net_ev_gain', 0)),
+                    "net_ev_gain_adjusted": to_python_type(rec_data.get('net_ev_gain_adjusted', rec_data.get('net_ev_gain', 0))),
+                    "players_out": [get_player_stats(p) for p in filtered_out],
+                    "players_in": [get_player_stats(p) for p in filtered_in],
+                    "penalty_hits": to_python_type(rec_data.get('penalty_hits', 0)),
+                    "hit_reason": rec_data.get('hit_reason')
+                }
             
-            if len(filtered_players_out) < len(rec.get('players_out', [])):
-                logger.warning(f"ReportGenerator: Filtered out {len(rec.get('players_out', [])) - len(filtered_players_out)} blocked players from players_out")
-            if len(filtered_players_in) < len(rec.get('players_in', [])):
-                logger.warning(f"ReportGenerator: Filtered out {len(rec.get('players_in', [])) - len(filtered_players_in)} blocked players from players_in")
+            # Process best no-hit recommendation
+            if best_no_hit:
+                transfer_recommendations["best_no_hit"] = build_rec_dict(best_no_hit)
             
-            # Build enhanced player lists with stats (only for non-blocked players)
-            out_players = [get_player_stats(p) for p in filtered_players_out]
-            in_players = [get_player_stats(p) for p in filtered_players_in]
+            # Process best hit recommendation
+            if best_hit:
+                transfer_recommendations["best_hit"] = build_rec_dict(best_hit)
             
-            transfer_recommendations["top_suggestion"] = {
-                "num_transfers": to_python_type(len(out_players)),  # Use filtered count
-                "net_ev_gain": to_python_type(rec.get('net_ev_gain', 0)),
-                "players_out": out_players,
-                "players_in": in_players,
-                "penalty_hits": to_python_type(rec.get('penalty_hits', 0)),
-                "hit_reason": rec.get('hit_reason')  # Reason for taking a hit transfer
-            }
+            # Top suggestion is the overall best (highest net_ev_gain_adjusted)
+            rec = recommendations[0]  # Already sorted by net_ev_gain_adjusted
+            transfer_recommendations["top_suggestion"] = build_rec_dict(rec)
         
         # Updated Squad After Transfers
         updated_squad = {

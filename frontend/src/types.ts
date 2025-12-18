@@ -92,6 +92,7 @@ export interface MLReport {
     top_suggestion: {
       num_transfers: number;
       net_ev_gain: number;
+      net_ev_gain_adjusted?: number;
       penalty_hits?: number;
       hit_reason?: string | null;
       players_out: Array<{
@@ -116,6 +117,30 @@ export interface MLReport {
         points_per_game: number | null;
         fdr: number | null;
       }>;
+    } | null;
+    best_no_hit?: {
+      num_transfers: number;
+      net_ev_gain: number;
+      net_ev_gain_adjusted: number;
+      penalty_hits: number;
+      players_out: Array<any>;
+      players_in: Array<any>;
+    } | null;
+    best_hit?: {
+      num_transfers: number;
+      net_ev_gain: number;
+      net_ev_gain_adjusted: number;
+      penalty_hits: number;
+      hit_reason?: string | null;
+      players_out: Array<any>;
+      players_in: Array<any>;
+    } | null;
+    hit_vs_no_hit_comparison?: {
+      better_option: "hit" | "no_hit";
+      reason: string;
+      hit_net_gain: number | null;
+      no_hit_net_gain: number | null;
+      difference: number | null;
     } | null;
   };
   updated_squad: {
