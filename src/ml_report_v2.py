@@ -129,12 +129,11 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     
     logger.info(f"ML Report V2: Current squad size: {len(current_squad)}, IDs: {sorted(current_squad['id'].tolist())}")
     
-    # Step 5: Import and use optimizer (but with our clean squad)
-    try:
-        from .optimizer_v2 import TransferOptimizerV2
-        from .report import ReportGenerator
-        from .chip_evaluator import ChipEvaluator
-        from .fpl_api import FPLAPIClient
+        # Step 5: Import and use optimizer (but with our clean squad)
+        try:
+            from src.optimizer_v2 import TransferOptimizerV2
+            from src.report import ReportGenerator
+            from src.chip_evaluator import ChipEvaluator
         
         # Create optimizer
         config = {"optimizer": {"points_hit_per_transfer": -4}}
