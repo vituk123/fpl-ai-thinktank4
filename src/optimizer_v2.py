@@ -263,7 +263,22 @@ class TransferOptimizerV2:
             ]
             prob += pulp.lpSum(current_team + avail_team) <= self.max_players_per_team
         
-        logger.info(f"OptimizerV2: [create_pulp_model] ✓ Model created successfully")
+        # POSITION MATCHING CONSTRAINT: For each position, transfers out = transfers in
+        # This ensures apples-to-apples comparisons (MID->MID, DEF->DEF, etc.)
+        for pos in self.position_requirements.keys():
+            out_pos = [
+                transfer_out_vars[p['id']]
+                for _, p in current_squad.iterrows()
+                if p['element_type'] == pos and p['id'] in transfer_out_vars
+            ]
+            in_pos = [
+                transfer_in_vars[p['id']]
+                for _, p in available_players.iterrows()
+                if p['element_type'] == pos and p['id'] in transfer_in_vars
+            ]
+            prob += pulp.lpSum(out_pos) == pulp.lpSum(in_pos), f"Position_Match_{pos}"
+        
+        logger.info(f"OptimizerV2: [create_pulp_model] ✓ Model created successfully with position matching")
         
         return prob, {
             'transfer_out_vars': transfer_out_vars,
@@ -360,6 +375,52 @@ class TransferOptimizerV2:
             raise ValueError(f"Blocked players found in results: out={blocked_in_out}, in={blocked_in_in}")
         
         logger.info(f"OptimizerV2: [solve_transfer_optimization] ✓ Results verified clean")
+        
+        # ENFORCE POSITION MATCHING: Sort by position and pair them
+        # Group by position
+        out_by_pos = {}
+        in_by_pos = {}
+        for p in players_out:
+            pos = p.get('element_type', 0)
+            if pos not in out_by_pos:
+                out_by_pos[pos] = []
+            out_by_pos[pos].append(p)
+        for p in players_in:
+            pos = p.get('element_type', 0)
+            if pos not in in_by_pos:
+                in_by_pos[pos] = []
+            in_by_pos[pos].append(p)
+        
+        # Rebuild lists sorted by position, matching positions
+        matched_out = []
+        matched_in = []
+        
+        # First, handle positions that exist in both
+        common_positions = set(out_by_pos.keys()) & set(in_by_pos.keys())
+        for pos in sorted(common_positions):
+            out_list = out_by_pos[pos]
+            in_list = in_by_pos[pos]
+            # Match them up (take minimum count)
+            match_count = min(len(out_list), len(in_list))
+            matched_out.extend(out_list[:match_count])
+            matched_in.extend(in_list[:match_count])
+        
+        # If there are unmatched positions, log warning but still include them
+        unmatched_out_pos = set(out_by_pos.keys()) - common_positions
+        unmatched_in_pos = set(in_by_pos.keys()) - common_positions
+        if unmatched_out_pos or unmatched_in_pos:
+            logger.warning(f"OptimizerV2: [solve_transfer_optimization] Position mismatch detected!")
+            logger.warning(f"OptimizerV2: [solve_transfer_optimization] Unmatched OUT positions: {unmatched_out_pos}")
+            logger.warning(f"OptimizerV2: [solve_transfer_optimization] Unmatched IN positions: {unmatched_in_pos}")
+            # Add unmatched players at the end (they won't be position-matched)
+            for pos in sorted(unmatched_out_pos):
+                matched_out.extend(out_by_pos[pos])
+            for pos in sorted(unmatched_in_pos):
+                matched_in.extend(in_by_pos[pos])
+        
+        players_out = matched_out
+        players_in = matched_in
+        
         logger.info(f"OptimizerV2: [solve_transfer_optimization] Players OUT: {[p['name'] + '(' + str(p['id']) + ')' for p in players_out]}")
         logger.info(f"OptimizerV2: [solve_transfer_optimization] Players IN: {[p['name'] + '(' + str(p['id']) + ')' for p in players_in]}")
         
@@ -465,7 +526,7 @@ class TransferOptimizerV2:
         # Sort by net EV gain
         recommendations.sort(key=lambda x: x['net_ev_gain_adjusted'], reverse=True)
         
-        # FINAL CRITICAL CHECK: Remove any recommendations with blocked players
+        # FINAL CRITICAL CHECK: Remove any recommendations with blocked players AND enforce position matching
         clean_recommendations = []
         for rec in recommendations:
             players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
@@ -476,6 +537,19 @@ class TransferOptimizerV2:
                 logger.error(f"OptimizerV2: [generate_smart_recommendations] CRITICAL - Recommendation contains blocked players {blocked_in_rec}!")
                 logger.error(f"OptimizerV2: [generate_smart_recommendations] Removing this recommendation")
                 continue
+            
+            # ENSURE POSITION MATCHING: Sort by position to ensure proper pairing
+            # The PuLP constraint should already enforce this, but we sort here for display
+            players_out = rec.get('players_out', [])
+            players_in = rec.get('players_in', [])
+            
+            # Sort both lists by position to ensure proper pairing
+            players_out_sorted = sorted(players_out, key=lambda p: (p.get('element_type', 0), p.get('id', 0)))
+            players_in_sorted = sorted(players_in, key=lambda p: (p.get('element_type', 0), p.get('id', 0)))
+            
+            rec['players_out'] = players_out_sorted
+            rec['players_in'] = players_in_sorted
+            logger.info(f"OptimizerV2: [generate_smart_recommendations] ✓ Position-sorted recommendation")
             
             clean_recommendations.append(rec)
         
