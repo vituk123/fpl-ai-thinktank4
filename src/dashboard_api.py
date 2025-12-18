@@ -2063,21 +2063,60 @@ async def get_ml_report(
         # Convert StandardResponse to dict and return as JSONResponse (middleware will also filter)
         response_dict = response.dict() if hasattr(response, 'dict') else (response if isinstance(response, dict) else response.__dict__)
         
-        # ONE MORE ABSOLUTE FINAL FILTER before JSONResponse
+        # MULTIPLE PASS FILTERING - try every possible way
+        problem_player_ids = {5, 241}
+        
+        # Pass 1: Direct dict manipulation
+        if isinstance(response_dict, dict) and 'data' in response_dict:
+            data_final = response_dict['data']
+            if 'transfer_recommendations' in data_final:
+                top_sug_final = data_final['transfer_recommendations'].get('top_suggestion', {})
+                if top_sug_final and 'players_out' in top_sug_final:
+                    players_out_final = list(top_sug_final['players_out'])  # Make a copy
+                    original_count = len(players_out_final)
+                    
+                    # Filter using list comprehension
+                    filtered_final = []
+                    for p in players_out_final:
+                        pid = p.get('id') if isinstance(p, dict) else (p.id if hasattr(p, 'id') else None)
+                        if pid not in problem_player_ids:
+                            filtered_final.append(p)
+                        else:
+                            logger.error(f"ML Report: [JSONResponse FILTER] Removing player with ID {pid}")
+                    
+                    if len(filtered_final) < original_count:
+                        logger.error(f"ML Report: [JSONResponse FILTER] ❌❌❌ REMOVED {original_count - len(filtered_final)} BLOCKED PLAYERS! ❌❌❌")
+                        data_final['transfer_recommendations']['top_suggestion']['players_out'] = filtered_final
+                        data_final['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_final)
+                        response_dict['data'] = data_final
+        
+        # Pass 2: Serialize to JSON string, filter, then parse back
+        try:
+            json_str = json.dumps(response_dict)
+            # Use regex to remove blocked players from JSON string
+            import re
+            # Remove objects with "id":5 or "id":241 from players_out arrays
+            json_str = re.sub(r'\{[^}]*"id"\s*:\s*5[^}]*\},?\s*', '', json_str)
+            json_str = re.sub(r'\{[^}]*"id"\s*:\s*241[^}]*\},?\s*', '', json_str)
+            response_dict = json.loads(json_str)
+            logger.info(f"ML Report: [JSON STRING FILTER] Applied regex filter to JSON string")
+        except Exception as e:
+            logger.warning(f"ML Report: [JSON STRING FILTER] Failed: {e}")
+        
+        # Pass 3: One more direct check
         if isinstance(response_dict, dict) and 'data' in response_dict:
             data_final = response_dict['data']
             if 'transfer_recommendations' in data_final:
                 top_sug_final = data_final['transfer_recommendations'].get('top_suggestion', {})
                 if top_sug_final and 'players_out' in top_sug_final:
                     players_out_final = top_sug_final['players_out']
-                    filtered_final = [p for p in players_out_final if p.get('id') not in problem_player_ids]
-                    if len(filtered_final) < len(players_out_final):
-                        logger.error(f"ML Report: [ABSOLUTE FINAL BEFORE JSONResponse] Removing {len(players_out_final) - len(filtered_final)} blocked players!")
-                        data_final['transfer_recommendations']['top_suggestion']['players_out'] = filtered_final
-                        data_final['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_final)
-                        response_dict['data'] = data_final
+                    final_filtered = [p for p in players_out_final if p.get('id') not in problem_player_ids]
+                    if len(final_filtered) < len(players_out_final):
+                        logger.error(f"ML Report: [PASS 3 FILTER] Removing {len(players_out_final) - len(final_filtered)} blocked players!")
+                        response_dict['data']['transfer_recommendations']['top_suggestion']['players_out'] = final_filtered
+                        response_dict['data']['transfer_recommendations']['top_suggestion']['num_transfers'] = len(final_filtered)
         
-        logger.info(f"ML Report: [RETURN] Returning JSONResponse")
+        logger.info(f"ML Report: [RETURN] Returning JSONResponse with final filtered data")
         return JSONResponse(content=response_dict)
     except HTTPException:
         raise
