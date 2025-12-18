@@ -1413,73 +1413,10 @@ async def get_ml_report(
         except: pass
         # #endregion
         
-            # DETERMINE CORRECT GAMEWEEK: Try multiple gameweeks until we find one without blocked players
-            blocked_players = {5, 241}  # Gabriel, Caicedo
-            determined_gameweek = gameweek
-            clean_squad_found = False
-            
-            # Priority 1: Try the requested gameweek
-            gameweeks_to_try = [gameweek]
-            
-            # Priority 2: If gameweek is finished, try next gameweek
-            target_event = next((e for e in events if e.get('id') == gameweek), None)
-            if target_event and target_event.get('finished', False):
-                gameweeks_to_try.append(gameweek + 1)
-            
-            # Priority 3: Most recent finished gameweek
-            finished_events = [e for e in events if e.get('finished', False)]
-            if finished_events:
-                most_recent = max(finished_events, key=lambda x: x.get('id', 0))
-                if most_recent['id'] not in gameweeks_to_try:
-                    gameweeks_to_try.append(most_recent['id'])
-            
-            # Priority 4: Previous gameweek (but NOT for GW16+ to avoid GW15)
-            if gameweek >= 16:
-                logger.info(f"GW{gameweek} >= 16, skipping GW{gameweek-1} to avoid blocked players")
-            elif gameweek - 1 not in gameweeks_to_try and gameweek > 1:
-                gameweeks_to_try.append(gameweek - 1)
-            
-            logger.info(f"ML Report: Will try gameweeks in order to find clean squad: {gameweeks_to_try}")
-            
-            # Try each gameweek until we find one without blocked players
-            for try_gw in gameweeks_to_try:
-                logger.info(f"ML Report: Testing GW{try_gw} for clean squad...")
-                
-                try:
-                    picks_data = await loop.run_in_executor(None, api_client.get_entry_picks, entry_id, try_gw, False)
-                    
-                    if not picks_data or 'picks' not in picks_data:
-                        logger.warning(f"ML Report: No picks data for GW{try_gw}")
-                        continue
-                    
-                    player_ids = [p['element'] for p in picks_data['picks']]
-                    blocked_found = set(player_ids).intersection(blocked_players)
-                    
-                    if blocked_found:
-                        logger.warning(f"ML Report: GW{try_gw} contains blocked players {blocked_found}, trying next gameweek...")
-                        continue
-                    
-                    # Success - found clean gameweek
-                    determined_gameweek = try_gw
-                    clean_squad_found = True
-                    logger.info(f"ML Report: ✓ SUCCESS - GW{determined_gameweek} is clean! Player IDs: {sorted(player_ids)}")
-                    break
-                    
-                except Exception as e:
-                    logger.warning(f"ML Report: Error testing GW{try_gw}: {e}")
-                    continue
-            
-            if not clean_squad_found:
-                logger.error(f"ML Report: CRITICAL - Could not find clean gameweek! Tried: {gameweeks_to_try}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Could not find valid squad data. Please contact support."
-                )
-            
-            # Get current squad using the determined gameweek
+            # Get current squad using the determined gameweek (gameweek is already determined by determine_clean_gameweek)
             try:
                 optimizer = TransferOptimizer(config)
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Getting current squad for entry {entry_id}, determined gameweek {determined_gameweek}")
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Getting current squad for entry {entry_id}, gameweek {gameweek}")
             # #region agent log
             try:
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
