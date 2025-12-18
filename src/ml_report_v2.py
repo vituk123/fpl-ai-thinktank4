@@ -196,7 +196,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             chip_evals, players_df, None, team_map, bootstrap
         )
         
-        # FINAL FILTER: Remove blocked players from report_data
+        # FINAL FILTER: Remove blocked players from report_data - MULTIPLE PASSES
+        # Pass 1: Transfer recommendations
         if 'transfer_recommendations' in report_data:
             top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
             if top_sug and 'players_out' in top_sug:
@@ -206,6 +207,38 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                     logger.error(f"ML Report V2: ❌❌❌ FINAL FILTER - Removed {len(players_out) - len(filtered_players_out)} blocked players from report_data! ❌❌❌")
                     report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
                     report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
+        
+        # Pass 2: Current squad in report_data
+        if 'current_squad' in report_data:
+            current_squad_list = report_data['current_squad']
+            filtered_squad = [p for p in current_squad_list if p.get('id') not in BLOCKED_PLAYER_IDS]
+            if len(filtered_squad) < len(current_squad_list):
+                logger.error(f"ML Report V2: ❌❌❌ Removed {len(current_squad_list) - len(filtered_squad)} blocked players from current_squad in report_data! ❌❌❌")
+                report_data['current_squad'] = filtered_squad
+        
+        # Pass 3: Deep recursive filter on entire report_data
+        def deep_filter(obj):
+            if isinstance(obj, dict):
+                if 'id' in obj and obj['id'] in BLOCKED_PLAYER_IDS:
+                    return None
+                return {k: deep_filter(v) for k, v in obj.items() if deep_filter(v) is not None}
+            elif isinstance(obj, list):
+                filtered = [deep_filter(item) for item in obj]
+                return [item for item in filtered if item is not None]
+            return obj
+        
+        report_data = deep_filter(report_data)
+        
+        # Pass 4: One more explicit check on transfer recommendations
+        if 'transfer_recommendations' in report_data:
+            top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
+            if top_sug and 'players_out' in top_sug:
+                players_out = top_sug['players_out']
+                final_filtered = [p for p in players_out if p.get('id') not in BLOCKED_PLAYER_IDS]
+                if len(final_filtered) < len(players_out):
+                    logger.error(f"ML Report V2: ❌❌❌ PASS 4 FILTER - Removed {len(players_out) - len(final_filtered)} blocked players! ❌❌❌")
+                    report_data['transfer_recommendations']['top_suggestion']['players_out'] = final_filtered
+                    report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(final_filtered)
         
         logger.info(f"ML Report V2: ✅ Report generated successfully")
         return report_data
