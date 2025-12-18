@@ -1428,6 +1428,10 @@ async def get_ml_report(
     use_v2_bool = use_v2 if isinstance(use_v2, bool) else str(use_v2).lower() in ('true', '1', 'yes')
     logger.info(f"ML Report: use_v2_bool = {use_v2_bool}")
     
+    # FORCE V2 FOR INVESTIGATION
+    use_v2_bool = True
+    logger.info(f"ML Report: FORCING V2 FOR INVESTIGATION - use_v2_bool = {use_v2_bool}")
+    
     if use_v2_bool:
         logger.info(f"ML Report: ========== USING V2 SIMPLIFIED GENERATOR ==========")
         logger.info(f"ML Report: Entry ID: {entry_id}, Model Version: {model_version}")
