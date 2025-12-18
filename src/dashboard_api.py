@@ -118,6 +118,65 @@ def setup_cors(app: FastAPI, config: dict):
 # Setup CORS early (before startup event)
 setup_cors(app, config)
 
+# CRITICAL: Response middleware to filter blocked players from ML report responses
+class BlockedPlayerFilterMiddleware(BaseHTTPMiddleware):
+    """Middleware to filter blocked players from ML report responses"""
+    BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
+    
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        
+        # Only filter ML report endpoint
+        if request.url.path == "/api/v1/ml/report" and response.status_code == 200:
+            try:
+                # Get response body
+                response_body = b""
+                async for chunk in response.body_iterator:
+                    response_body += chunk
+                
+                # Parse JSON
+                data = json.loads(response_body.decode('utf-8'))
+                
+                # Filter blocked players
+                if 'data' in data:
+                    data_dict = data['data']
+                    
+                    # Filter transfer recommendations
+                    if 'transfer_recommendations' in data_dict:
+                        top_sug = data_dict['transfer_recommendations'].get('top_suggestion', {})
+                        if top_sug and 'players_out' in top_sug:
+                            original_out = top_sug['players_out']
+                            filtered_out = [p for p in original_out if p.get('id') not in self.BLOCKED_PLAYER_IDS]
+                            if len(filtered_out) < len(original_out):
+                                logger.error(f"Middleware: Filtered {len(original_out) - len(filtered_out)} blocked players from response!")
+                                data_dict['transfer_recommendations']['top_suggestion']['players_out'] = filtered_out
+                                data_dict['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_out)
+                    
+                    # Filter current_squad
+                    if 'current_squad' in data_dict:
+                        original_squad = data_dict['current_squad']
+                        filtered_squad = [p for p in original_squad if p.get('id') not in self.BLOCKED_PLAYER_IDS]
+                        if len(filtered_squad) < len(original_squad):
+                            logger.error(f"Middleware: Filtered {len(original_squad) - len(filtered_squad)} blocked players from current_squad!")
+                            data_dict['current_squad'] = filtered_squad
+                
+                # Create new response with filtered data
+                filtered_json = json.dumps(data).encode('utf-8')
+                response = Response(
+                    content=filtered_json,
+                    status_code=response.status_code,
+                    media_type=response.media_type,
+                    headers=dict(response.headers)
+                )
+            except Exception as e:
+                logger.error(f"Middleware filter error: {e}", exc_info=True)
+                # Return original response if filtering fails
+        
+        return response
+
+# Add middleware AFTER CORS (middleware order matters)
+app.add_middleware(BlockedPlayerFilterMiddleware)
+
 # Global exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
