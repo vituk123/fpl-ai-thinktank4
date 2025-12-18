@@ -1895,13 +1895,66 @@ async def get_ml_report(
                 logger.error(f"ML Report: [FINAL FILTER] Removed {len(current_squad_list) - len(filtered_squad)} blocked players from current_squad in report")
                 report_data['current_squad'] = filtered_squad
         
-        return StandardResponse(
-            data=report_data,
+        # CRITICAL: One more pass - deep filter the entire report_data structure
+        def deep_filter_blocked_players(obj, blocked_ids):
+            """Recursively filter blocked players from any nested structure"""
+            if isinstance(obj, dict):
+                # Check if this dict has an 'id' field that's blocked
+                if 'id' in obj and obj['id'] in blocked_ids:
+                    return None  # Mark for removal
+                # Recursively filter all values
+                filtered = {}
+                for k, v in obj.items():
+                    filtered_v = deep_filter_blocked_players(v, blocked_ids)
+                    if filtered_v is not None:
+                        filtered[k] = filtered_v
+                return filtered
+            elif isinstance(obj, list):
+                # Filter list items
+                filtered = []
+                for item in obj:
+                    filtered_item = deep_filter_blocked_players(item, blocked_ids)
+                    if filtered_item is not None:
+                        filtered.append(filtered_item)
+                return filtered
+            else:
+                return obj
+        
+        logger.info(f"ML Report: [FINAL FILTER] Applying deep recursive filter...")
+        report_data_filtered = deep_filter_blocked_players(report_data, problem_player_ids)
+        
+        # Verify the filter worked
+        top_suggestion_after = report_data_filtered.get('transfer_recommendations', {}).get('top_suggestion', {})
+        if top_suggestion_after:
+            players_out_after = [p.get('id') for p in top_suggestion_after.get('players_out', [])]
+            blocked_after = set(players_out_after).intersection(problem_player_ids)
+            if blocked_after:
+                logger.error(f"ML Report: [FINAL FILTER] ❌ Deep filter failed! Still have blocked players: {blocked_after}")
+            else:
+                logger.info(f"ML Report: [FINAL FILTER] ✅ Deep filter successful - no blocked players")
+        
+        # Create response with filtered data
+        response = StandardResponse(
+            data=report_data_filtered,
             meta={
                 "model_version": model_version,
                 "generated_at": datetime.now().isoformat()
             }
         )
+        
+        # FINAL FINAL CHECK: Filter the response object itself before returning
+        if hasattr(response, 'data') and response.data:
+            if 'transfer_recommendations' in response.data:
+                top_sug = response.data.get('transfer_recommendations', {}).get('top_suggestion', {})
+                if top_sug and 'players_out' in top_sug:
+                    original_players_out = top_sug['players_out']
+                    filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
+                    if len(filtered_players_out) < len(original_players_out):
+                        logger.error(f"ML Report: [FINAL FINAL FILTER] Filtering response object directly!")
+                        response.data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
+                        response.data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
+        
+        return response
     except HTTPException:
         raise
     except Exception as e:
