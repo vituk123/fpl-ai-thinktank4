@@ -267,7 +267,7 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                                 # Used some transfers - they get 1 free for next week
                                 # But if they had 5 and used some, they might have more left
                                 # Calculate: if cost was 0, all were free, so remaining = 5 - transfers_used + 1
-                                transfer_cost = previous_event.get('event_transfers_cost', 0)
+                                transfer_cost = current_event.get('event_transfers_cost', 0)
                                 if transfer_cost == 0:
                                     # All transfers were free, so they had at least that many
                                     # Assume they started with 5 (GW15 reset), used some, get 1 more
