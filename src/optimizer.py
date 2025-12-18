@@ -23,6 +23,34 @@ class TransferOptimizer:
         self.position_requirements = {1: 2, 2: 5, 3: 5, 4: 3}
         self.max_players_per_team = 3
         self.free_transfers = 1
+    
+    def _verify_squad_integrity(self, squad: pd.DataFrame, gameweek: int = 999) -> pd.DataFrame:
+        """
+        Verify squad doesn't contain blocked players.
+        Returns cleaned squad with blocked players removed.
+        Raises ValueError if squad is corrupted.
+        """
+        if squad.empty:
+            return squad
+        
+        squad_ids = set(squad['id'])
+        blocked_found = squad_ids.intersection(BLOCKED_PLAYER_IDS)
+        
+        if blocked_found:
+            logger.error(f"CRITICAL: Squad contains blocked players: {blocked_found}")
+            logger.error(f"Full squad IDs: {sorted(squad_ids)}")
+            
+            # Remove blocked players
+            cleaned_squad = squad[~squad['id'].isin(BLOCKED_PLAYER_IDS)].copy()
+            logger.warning(f"Removed {len(blocked_found)} blocked players. New squad size: {len(cleaned_squad)}")
+            
+            # If squad is now too small, raise error
+            if len(cleaned_squad) < 11:
+                raise ValueError(f"Squad too small after removing blocked players: {len(cleaned_squad)} players (need 11+)")
+            
+            return cleaned_squad
+        
+        return squad
         
     def get_current_squad(self, entry_id: int, gameweek: int, api_client, players_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -247,6 +275,9 @@ class TransferOptimizer:
                          num_transfers: int,
                          forced_out_ids: List[int] = None) -> Tuple[pulp.LpProblem, Dict]:
         
+        # CRITICAL: Verify squad integrity FIRST - before creating any variables
+        current_squad = self._verify_squad_integrity(current_squad, gameweek=999)
+        
         prob = pulp.LpProblem("FPL_Transfer_Optimization", pulp.LpMaximize)
         
         final_squad_vars = {}
@@ -255,6 +286,12 @@ class TransferOptimizer:
         
         current_squad_ids = set(current_squad['id'])
         available_player_ids = set(available_players['id'])
+        
+        # CRITICAL: Double-check no blocked players in squad IDs
+        blocked_in_squad = current_squad_ids.intersection(BLOCKED_PLAYER_IDS)
+        if blocked_in_squad:
+            raise ValueError(f"CRITICAL: Blocked players {blocked_in_squad} still in squad after verification!")
+        
         all_player_ids = current_squad_ids.union(available_player_ids)
         
         # CRITICAL: Verify no GW15 players (Gabriel=5, Caicedo=241) in current_squad
@@ -524,29 +561,36 @@ class TransferOptimizer:
     
     def generate_smart_recommendations(self, current_squad, available_players, bank, free_transfers, max_transfers: int = 4):
         """
-        Generate comprehensive transfer recommendations including all scenarios.
+        Generate comprehensive transfer recommendations.
         
-        Args:
-            current_squad: Current squad DataFrame
-            available_players: Available players DataFrame
-            bank: Available budget
-            free_transfers: Number of free transfers
-            max_transfers: Maximum number of transfers to consider (default 4)
-        
-        Returns:
-            Dictionary with recommendations, forced transfer info
+        CRITICAL: Verifies squad integrity before optimization.
         """
-        # CRITICAL: Remove GW15 players (Gabriel=5, Caicedo=241) if they somehow got into the squad
-        # These players were removed before GW16 started and should NEVER be in the current squad
-        if not current_squad.empty:
-            problem_players = {5, 241}  # Gabriel, Caicedo
-            squad_ids = set(current_squad['id'])
-            found_problem_players = squad_ids.intersection(problem_players)
-            if found_problem_players:
-                logger.error(f"CRITICAL in generate_smart_recommendations: Found GW15 players in current_squad! Problem IDs: {found_problem_players}, Full squad: {sorted(squad_ids)}")
-                # Remove them immediately
-                current_squad = current_squad[~current_squad['id'].isin(problem_players)].copy()
-                logger.warning(f"Removed problem players. New squad size: {len(current_squad)}, IDs: {sorted(set(current_squad['id']))}")
+        # CRITICAL: Verify and clean squad BEFORE any optimization
+        try:
+            original_size = len(current_squad)
+            current_squad = self._verify_squad_integrity(current_squad, gameweek=999)
+            if len(current_squad) < original_size:
+                logger.warning(f"Squad was cleaned: {original_size} -> {len(current_squad)} players")
+        except ValueError as e:
+            logger.error(f"Squad integrity check failed: {e}")
+            return {
+                'recommendations': [],
+                'num_forced_transfers': 0,
+                'forced_players': [],
+                'error': str(e)
+            }
+        
+        if current_squad.empty:
+            logger.error("Current squad is empty after verification!")
+            return {
+                'recommendations': [],
+                'num_forced_transfers': 0,
+                'forced_players': [],
+                'error': 'Empty squad'
+            }
+        
+        logger.info(f"Generating recommendations with {len(current_squad)} players")
+        logger.info(f"Squad player IDs: {sorted(current_squad['id'].tolist())[:10]}...")
         
         # #region agent log
         import json

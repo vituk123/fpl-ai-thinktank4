@@ -1330,19 +1330,38 @@ async def get_ml_report(
             except: pass
             # #endregion
             current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
-            # CRITICAL: Make a deep copy immediately and verify no problem players
-            PROBLEM_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
+            
+            # CRITICAL VERIFICATION: Check for blocked players
+            blocked_players = {5, 241}  # Gabriel, Caicedo
             if not current_squad.empty:
-                squad_ids_before = set(current_squad['id'].tolist())
-                problem_found = PROBLEM_PLAYER_IDS.intersection(squad_ids_before)
+                squad_ids = set(current_squad['id'])
+                found_blocked = squad_ids.intersection(blocked_players)
                 
-                if problem_found and gameweek >= 16:
-                    logger.error(f"ML Report: CRITICAL - Problem players {problem_found} found in squad from get_current_squad! Force removing them...")
-                    current_squad = current_squad[~current_squad['id'].isin(PROBLEM_PLAYER_IDS)].copy()
-                    logger.error(f"ML Report: Force-removed problem players. New squad size: {len(current_squad)}, IDs: {sorted(current_squad['id'].tolist())}")
+                if found_blocked:
+                    logger.error(f"ML Report: CRITICAL ERROR - Found blocked players {found_blocked} in squad!")
+                    logger.error(f"Full squad IDs: {sorted(squad_ids)}")
+                    logger.error(f"This should NEVER happen - get_current_squad should have filtered these out!")
+                    
+                    # Last resort: force clear cache and try one more time
+                    api_client.clear_cache()
+                    logger.warning("Attempting to re-fetch squad after cache clear...")
+                    current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
+                    
+                    # Check again
+                    if not current_squad.empty:
+                        squad_ids_retry = set(current_squad['id'])
+                        found_blocked_retry = squad_ids_retry.intersection(blocked_players)
+                        
+                        if found_blocked_retry:
+                            logger.error(f"ML Report: Still found blocked players after retry: {found_blocked_retry}")
+                            raise HTTPException(
+                                status_code=500, 
+                                detail=f"Squad contains invalid players {found_blocked_retry}. Please contact support."
+                            )
+                        else:
+                            logger.info(f"ML Report: SUCCESS - Squad is now clean after retry")
                 else:
-                    current_squad = current_squad.copy()
-                    logger.info(f"ML Report: Squad from get_current_squad - Size: {len(current_squad)}, Player IDs: {sorted(current_squad['id'].tolist())}")
+                    logger.info(f"ML Report: Squad is clean. Size: {len(current_squad)}, IDs: {sorted(squad_ids)}")
             if current_squad.empty:
                 logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
                 current_squad_ids = set()
