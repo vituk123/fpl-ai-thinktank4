@@ -1862,35 +1862,38 @@ async def get_ml_report(
             chip_evals, players_df, all_fixtures, team_map, bootstrap
         )
         
-        # FINAL CHECK: Filter out GW15 players from report_data recommendations
-        # This is a last-resort filter in case report generator modified recommendations
+        # FINAL HARD FILTER: Remove blocked players from report_data at the very end
         problem_player_ids = {5, 241}  # Gabriel, Caicedo
+        logger.info(f"ML Report: [FINAL FILTER] ========== APPLYING FINAL HARD FILTER ==========")
+        
+        # Filter transfer recommendations
         top_suggestion = report_data.get('transfer_recommendations', {}).get('top_suggestion', {})
-        if top_suggestion and top_suggestion.get('players_out'):
-            players_out = top_suggestion['players_out']
-            players_out_ids = {p.get('id') for p in players_out}
-            has_problem = bool(players_out_ids.intersection(problem_player_ids))
+        if top_suggestion:
+            original_out = top_suggestion.get('players_out', [])
+            original_in = top_suggestion.get('players_in', [])
             
-            logger.info(f"ML Report: FINAL FILTER CHECK - Players OUT IDs: {list(players_out_ids)}, Has problem players: {has_problem}")
+            filtered_out = [p for p in original_out if p.get('id') not in problem_player_ids]
+            filtered_in = [p for p in original_in if p.get('id') not in problem_player_ids]
             
-            if has_problem:
-                filtered_players_out = [p for p in players_out if p.get('id') not in problem_player_ids]
-                removed_count = len(players_out) - len(filtered_players_out)
-                logger.error(f"ML Report: FINAL FILTER - Removed {removed_count} GW15 players from report_data! Original IDs: {[p.get('id') for p in players_out]}, Filtered IDs: {[p.get('id') for p in filtered_players_out]}")
+            if len(filtered_out) < len(original_out) or len(filtered_in) < len(original_in):
+                logger.error(f"ML Report: [FINAL FILTER] ❌❌❌ REMOVING BLOCKED PLAYERS FROM FINAL OUTPUT ❌❌❌")
+                logger.error(f"ML Report: [FINAL FILTER] Original OUT IDs: {[p.get('id') for p in original_out]}")
+                logger.error(f"ML Report: [FINAL FILTER] Filtered OUT IDs: {[p.get('id') for p in filtered_out]}")
                 
-                # Update the report_data
-                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
-                
-                # Also adjust players_in to match
-                players_in = top_suggestion.get('players_in', [])
-                if len(players_in) >= removed_count:
-                    report_data['transfer_recommendations']['top_suggestion']['players_in'] = players_in[:-removed_count] if removed_count > 0 else players_in
-                    report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
-                    logger.info(f"ML Report: FINAL FILTER - Adjusted to {len(filtered_players_out)} transfers")
-                else:
-                    logger.warning(f"ML Report: FINAL FILTER - Cannot adjust players_in (not enough players). Keeping original.")
+                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_out
+                report_data['transfer_recommendations']['top_suggestion']['players_in'] = filtered_in
+                report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_out)
+                logger.error(f"ML Report: [FINAL FILTER] Updated to {len(filtered_out)} transfers")
             else:
-                logger.info(f"ML Report: FINAL FILTER - No GW15 players found in report_data. Recommendations are clean.")
+                logger.info(f"ML Report: [FINAL FILTER] ✅ No blocked players in transfer recommendations")
+        
+        # Also filter current_squad in report_data
+        current_squad_list = report_data.get('current_squad', [])
+        if current_squad_list:
+            filtered_squad = [p for p in current_squad_list if p.get('id') not in problem_player_ids]
+            if len(filtered_squad) < len(current_squad_list):
+                logger.error(f"ML Report: [FINAL FILTER] Removed {len(current_squad_list) - len(filtered_squad)} blocked players from current_squad in report")
+                report_data['current_squad'] = filtered_squad
         
         return StandardResponse(
             data=report_data,
