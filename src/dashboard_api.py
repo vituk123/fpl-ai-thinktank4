@@ -1422,16 +1422,33 @@ async def get_ml_report(
     
     # NEW: Use simplified V2 generator if requested
     if use_v2:
-        logger.info(f"ML Report: Using V2 simplified generator for entry {entry_id}")
+        logger.info(f"ML Report: ========== USING V2 SIMPLIFIED GENERATOR ==========")
+        logger.info(f"ML Report: Entry ID: {entry_id}, Model Version: {model_version}")
         try:
             from .ml_report_v2 import generate_ml_report_v2
             import asyncio
             loop = asyncio.get_event_loop()
+            logger.info(f"ML Report: Calling generate_ml_report_v2...")
             report_data = await loop.run_in_executor(None, generate_ml_report_v2, entry_id, model_version)
+            logger.info(f"ML Report: V2 generator returned data")
             
             if 'error' in report_data:
+                logger.error(f"ML Report: V2 generator returned error: {report_data['error']}")
                 raise HTTPException(status_code=500, detail=report_data['error'])
             
+            # Check if blocked players are in the response
+            if 'transfer_recommendations' in report_data:
+                top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
+                if top_sug and 'players_out' in top_sug:
+                    players_out = top_sug['players_out']
+                    player_ids = [p.get('id') for p in players_out]
+                    blocked = set(player_ids).intersection({5, 241})
+                    if blocked:
+                        logger.error(f"ML Report: ❌❌❌ V2 GENERATOR RETURNED BLOCKED PLAYERS: {blocked} ❌❌❌")
+                    else:
+                        logger.info(f"ML Report: ✅ V2 generator returned clean data")
+            
+            logger.info(f"ML Report: Returning V2 response")
             return JSONResponse(content={
                 "data": report_data,
                 "meta": {
@@ -1440,8 +1457,12 @@ async def get_ml_report(
                     "generator": "v2_simplified"
                 }
             })
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"ML Report V2 error: {e}", exc_info=True)
+            import traceback
+            logger.error(f"ML Report V2 traceback: {traceback.format_exc()}")
             raise HTTPException(status_code=500, detail=f"V2 generator failed: {str(e)}")
     
     # Original implementation continues below...
