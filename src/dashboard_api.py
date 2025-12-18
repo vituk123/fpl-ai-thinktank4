@@ -1224,6 +1224,9 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
     """
     blocked_players = {5, 241}  # Gabriel, Caicedo
     
+    logger.info(f"ML Report: [GAMEWEEK DETERMINATION] ========== STARTING GAMEWEEK DETERMINATION ==========")
+    logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Entry ID: {entry_id}, Blocked players: {blocked_players}")
+    
     # Get current gameweek first
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
@@ -1231,15 +1234,18 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
     
     if current_event:
         initial_gameweek = current_event.get('id')
+        logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Found current event: GW{initial_gameweek} (is_current=True, finished={current_event.get('finished', False)})")
     else:
         # Fallback: find latest finished gameweek
         finished_events = [e for e in events if e.get('finished', False)]
         if finished_events:
             initial_gameweek = max(finished_events, key=lambda x: x.get('id', 0)).get('id')
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] No current event, using latest finished: GW{initial_gameweek}")
         else:
             initial_gameweek = max((e.get('id', 1) for e in events), default=1)
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] No finished events, using max ID: GW{initial_gameweek}")
     
-    logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Starting with initial gameweek: {initial_gameweek}")
+    logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Initial gameweek: {initial_gameweek}")
     
     # Try multiple gameweeks in priority order
     gameweeks_to_try = []
@@ -1251,6 +1257,7 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
     target_event = next((e for e in events if e.get('id') == initial_gameweek), None)
     if target_event and target_event.get('finished', False):
         gameweeks_to_try.append(initial_gameweek + 1)
+        logger.info(f"ML Report: [GAMEWEEK DETERMINATION] GW{initial_gameweek} is finished, will also try GW{initial_gameweek + 1}")
     
     # Priority 3: Most recent finished gameweek
     finished_events = [e for e in events if e.get('finished', False)]
@@ -1258,47 +1265,69 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
         most_recent = max(finished_events, key=lambda x: x.get('id', 0))
         if most_recent['id'] not in gameweeks_to_try:
             gameweeks_to_try.append(most_recent['id'])
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Will also try most recent finished: GW{most_recent['id']}")
     
     # Priority 4: Previous gameweek (but NOT for GW16+ to avoid GW15)
     if initial_gameweek >= 16:
         logger.info(f"ML Report: [GAMEWEEK DETERMINATION] GW{initial_gameweek} >= 16, skipping GW{initial_gameweek-1} to avoid blocked players")
     elif initial_gameweek - 1 not in gameweeks_to_try and initial_gameweek > 1:
         gameweeks_to_try.append(initial_gameweek - 1)
+        logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Will also try previous: GW{initial_gameweek - 1}")
     
     logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Will try gameweeks in order: {gameweeks_to_try}")
     
     # Try each gameweek until we find one without blocked players
-    for try_gw in gameweeks_to_try:
-        logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Testing GW{try_gw} for clean squad...")
+    for idx, try_gw in enumerate(gameweeks_to_try, 1):
+        logger.info(f"ML Report: [GAMEWEEK DETERMINATION] ========== ATTEMPT {idx}/{len(gameweeks_to_try)}: Testing GW{try_gw} ==========")
         
         try:
+            # Clear cache before each attempt
+            api_client.clear_cache()
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Cache cleared, fetching picks for GW{try_gw}...")
+            
             picks_data = api_client.get_entry_picks(entry_id, try_gw, use_cache=False)
             
-            if not picks_data or 'picks' not in picks_data:
-                logger.warning(f"ML Report: [GAMEWEEK DETERMINATION] No picks data for GW{try_gw}")
+            if not picks_data:
+                logger.warning(f"ML Report: [GAMEWEEK DETERMINATION] No picks_data returned for GW{try_gw}")
+                continue
+            
+            if 'picks' not in picks_data:
+                logger.warning(f"ML Report: [GAMEWEEK DETERMINATION] No 'picks' key in picks_data for GW{try_gw}")
+                logger.warning(f"ML Report: [GAMEWEEK DETERMINATION] picks_data keys: {list(picks_data.keys())}")
                 continue
             
             player_ids = [p['element'] for p in picks_data['picks']]
-            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] GW{try_gw} raw picks - Player IDs: {sorted(player_ids)}")
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] GW{try_gw} - Raw picks count: {len(player_ids)}")
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] GW{try_gw} - Raw player IDs: {sorted(player_ids)}")
+            
+            # Check for blocked players
             blocked_found = set(player_ids).intersection(blocked_players)
             
             if blocked_found:
-                logger.error(f"ML Report: [GAMEWEEK DETERMINATION] GW{try_gw} contains blocked players {blocked_found}!")
+                logger.error(f"ML Report: [GAMEWEEK DETERMINATION] ❌ GW{try_gw} CONTAINS BLOCKED PLAYERS: {blocked_found}")
                 logger.error(f"ML Report: [GAMEWEEK DETERMINATION] Full player IDs from GW{try_gw}: {sorted(player_ids)}")
+                logger.error(f"ML Report: [GAMEWEEK DETERMINATION] Blocked player details:")
+                for pid in blocked_found:
+                    blocked_pick = next((p for p in picks_data['picks'] if p['element'] == pid), None)
+                    logger.error(f"ML Report: [GAMEWEEK DETERMINATION]   - Player ID {pid}: {blocked_pick}")
                 continue
             
             # Success - found clean gameweek
-            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] ✓ SUCCESS - GW{try_gw} is clean!")
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] ✅ SUCCESS - GW{try_gw} is CLEAN!")
             logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Clean player IDs: {sorted(player_ids)}")
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] Verified: No blocked players in {len(player_ids)} picks")
+            logger.info(f"ML Report: [GAMEWEEK DETERMINATION] ========== DETERMINED GAMEWEEK: {try_gw} ==========")
             return try_gw
             
         except Exception as e:
-            logger.warning(f"ML Report: [GAMEWEEK DETERMINATION] Error testing GW{try_gw}: {e}")
+            logger.error(f"ML Report: [GAMEWEEK DETERMINATION] Exception testing GW{try_gw}: {e}", exc_info=True)
             continue
     
     # If we get here, all gameweeks failed - return the initial gameweek as fallback
-    logger.error(f"ML Report: [GAMEWEEK DETERMINATION] CRITICAL - Could not find clean gameweek! Tried: {gameweeks_to_try}")
+    logger.error(f"ML Report: [GAMEWEEK DETERMINATION] ❌❌❌ CRITICAL - Could not find clean gameweek! ❌❌❌")
+    logger.error(f"ML Report: [GAMEWEEK DETERMINATION] Tried gameweeks: {gameweeks_to_try}")
     logger.error(f"ML Report: [GAMEWEEK DETERMINATION] Falling back to initial gameweek: {initial_gameweek}")
+    logger.error(f"ML Report: [GAMEWEEK DETERMINATION] ========== WARNING: USING FALLBACK GAMEWEEK ==========")
     return initial_gameweek
 
 @app.get("/api/v1/ml/report")
