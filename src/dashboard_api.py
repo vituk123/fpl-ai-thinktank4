@@ -1415,9 +1415,36 @@ def determine_clean_gameweek(entry_id: int, api_client, events: List[Dict]) -> i
 async def get_ml_report(
     entry_id: int = Query(..., description="FPL entry ID (required)"),
     model_version: str = Query("v4.6", description="ML model version"),
-    fast_mode: bool = Query(False, description="Fast mode: skip expensive operations (default: False for full ML)")
+    fast_mode: bool = Query(False, description="Fast mode: skip expensive operations (default: False for full ML)"),
+    use_v2: bool = Query(False, description="Use simplified V2 report generator (rewritten from scratch)")
 ):
     """Get complete ML report data (same as main.py output) for a specific team"""
+    
+    # NEW: Use simplified V2 generator if requested
+    if use_v2:
+        logger.info(f"ML Report: Using V2 simplified generator for entry {entry_id}")
+        try:
+            from .ml_report_v2 import generate_ml_report_v2
+            import asyncio
+            loop = asyncio.get_event_loop()
+            report_data = await loop.run_in_executor(None, generate_ml_report_v2, entry_id, model_version)
+            
+            if 'error' in report_data:
+                raise HTTPException(status_code=500, detail=report_data['error'])
+            
+            return JSONResponse(content={
+                "data": report_data,
+                "meta": {
+                    "model_version": model_version,
+                    "generated_at": datetime.now().isoformat(),
+                    "generator": "v2_simplified"
+                }
+            })
+        except Exception as e:
+            logger.error(f"ML Report V2 error: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"V2 generator failed: {str(e)}")
+    
+    # Original implementation continues below...
     # #region agent log
     import json
     try:
