@@ -1420,8 +1420,15 @@ async def get_ml_report(
 ):
     """Get complete ML report data (same as main.py output) for a specific team"""
     
+    # DEBUG: Log all parameters
+    logger.info(f"ML Report: Received request - entry_id={entry_id}, model_version={model_version}, fast_mode={fast_mode}, use_v2={use_v2} (type: {type(use_v2)})")
+    
     # NEW: Use simplified V2 generator if requested
-    if use_v2:
+    # Handle both string "true"/"false" and boolean
+    use_v2_bool = use_v2 if isinstance(use_v2, bool) else str(use_v2).lower() in ('true', '1', 'yes')
+    logger.info(f"ML Report: use_v2_bool = {use_v2_bool}")
+    
+    if use_v2_bool:
         logger.info(f"ML Report: ========== USING V2 SIMPLIFIED GENERATOR ==========")
         logger.info(f"ML Report: Entry ID: {entry_id}, Model Version: {model_version}")
         try:
