@@ -249,13 +249,14 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                 history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
                 if history_response.status_code == 200:
                     history = history_response.json()
-                    previous_event = next((e for e in history.get('current', []) if e.get('event') == gameweek - 1), None)
+                    # Check the CURRENT gameweek's transfers (not previous) to calculate free transfers for NEXT gameweek
+                    current_event = next((e for e in history.get('current', []) if e.get('event') == gameweek), None)
                     
                     if gameweek >= 15:
                         # GW15+ - everyone got 5 free transfers before GW15 deadline
-                        # Calculate remaining: start with 5, subtract transfers used, add 1 per week
-                        if previous_event:
-                            transfers_used = previous_event.get('event_transfers', 0)
+                        # Calculate remaining: start with 5, subtract transfers used in current GW, add 1 for next GW
+                        if current_event:
+                            transfers_used = current_event.get('event_transfers', 0)
                             # If they used transfers, they get 1 free for next week
                             # If they didn't use any, they get +1 (up to max of 5 for GW15+)
                             if transfers_used == 0:
@@ -280,8 +281,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                             free_transfers = 5
                     else:
                         # Before GW15 - normal free transfer logic
-                        if previous_event:
-                            transfers_used = previous_event.get('event_transfers', 0)
+                        if current_event:
+                            transfers_used = current_event.get('event_transfers', 0)
                             if transfers_used == 0:
                                 free_transfers = min(2, 1 + 1)  # +1 for not using, cap at 2
                             else:
@@ -303,13 +304,17 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             free_transfers = 1
         
         # #region agent log
-        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Before optimization", {"squad_ids": sorted(current_squad['id'].tolist()), "bank": bank}, "H3")
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Before optimization", {"squad_ids": sorted(current_squad['id'].tolist()), "bank": bank, "free_transfers": free_transfers}, "H3")
         # #endregion
         
         # Generate recommendations with CLEAN squad
         smart_recs = optimizer.generate_smart_recommendations(
             current_squad, available_players, bank, free_transfers, max_transfers=4
         )
+        
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"After optimization", {"num_recommendations": len(smart_recs.get('recommendations', [])), "top_rec_penalty_hits": smart_recs.get('recommendations', [{}])[0].get('penalty_hits', 'N/A') if smart_recs.get('recommendations') else 'N/A'}, "H3")
+        # #endregion
         
         # CRITICAL: Filter recommendations IMMEDIATELY
         recommendations = smart_recs.get('recommendations', [])
