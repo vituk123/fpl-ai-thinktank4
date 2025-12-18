@@ -1425,7 +1425,11 @@ async def get_ml_report(
     
     # #region agent log
     import json as json_log
-    DEBUG_LOG_PATH = r'/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+    import platform as plat
+    if plat.system() == 'Windows':
+        DEBUG_LOG_PATH = r'C:\fpl-api\v2_debug.log'
+    else:
+        DEBUG_LOG_PATH = r'/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
     try:
         with open(DEBUG_LOG_PATH, 'a') as f:
             f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:entry","message":"ML Report endpoint called","data":{"entry_id":entry_id,"use_v2":use_v2,"fast_mode":fast_mode},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')

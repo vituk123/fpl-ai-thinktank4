@@ -15,8 +15,12 @@ logger = logging.getLogger(__name__)
 # CRITICAL: Blocked players that should NEVER appear
 BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
 
-# Debug log path
-DEBUG_LOG_PATH = r'/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+# Debug log path - try Windows path first, then fallback to Mac path
+import platform
+if platform.system() == 'Windows':
+    DEBUG_LOG_PATH = r'C:\fpl-api\v2_debug.log'
+else:
+    DEBUG_LOG_PATH = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
 
 def debug_log(location: str, message: str, data: dict = None, hypothesis_id: str = "V2"):
     """Write debug log to file"""
@@ -33,7 +37,7 @@ def debug_log(location: str, message: str, data: dict = None, hypothesis_id: str
         with open(DEBUG_LOG_PATH, 'a') as f:
             f.write(json.dumps(log_entry) + '\n')
     except Exception as e:
-        logger.error(f"Debug log write failed: {e}")
+        logger.error(f"Debug log write failed to {DEBUG_LOG_PATH}: {e}")
 
 def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
     """Direct FPL API call to get picks - no caching, no wrapper"""
