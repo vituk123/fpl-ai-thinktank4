@@ -1423,43 +1423,90 @@ async def get_ml_report(
     # DEBUG: Log all parameters
     logger.info(f"ML Report: Received request - entry_id={entry_id}, model_version={model_version}, fast_mode={fast_mode}, use_v2={use_v2} (type: {type(use_v2)})")
     
+    # #region agent log
+    import json as json_log
+    DEBUG_LOG_PATH = r'/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+    try:
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:entry","message":"ML Report endpoint called","data":{"entry_id":entry_id,"use_v2":use_v2,"fast_mode":fast_mode},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')
+    except: pass
+    # #endregion
+    
     # NEW: Use simplified V2 generator if requested
     # Handle both string "true"/"false" and boolean
     use_v2_bool = use_v2 if isinstance(use_v2, bool) else str(use_v2).lower() in ('true', '1', 'yes')
-    logger.info(f"ML Report: use_v2_bool = {use_v2_bool}")
     
     # FORCE V2 FOR INVESTIGATION
     use_v2_bool = True
-    logger.info(f"ML Report: FORCING V2 FOR INVESTIGATION - use_v2_bool = {use_v2_bool}")
+    
+    # #region agent log
+    try:
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_check","message":"V2 check","data":{"use_v2_bool":use_v2_bool},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')
+    except: pass
+    # #endregion
     
     if use_v2_bool:
-        logger.info(f"ML Report: ========== USING V2 SIMPLIFIED GENERATOR ==========")
-        logger.info(f"ML Report: Entry ID: {entry_id}, Model Version: {model_version}")
+        # #region agent log
         try:
+            with open(DEBUG_LOG_PATH, 'a') as f:
+                f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_start","message":"Entering V2 code path","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H2"}) + '\n')
+        except: pass
+        # #endregion
+        
+        try:
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_import","message":"Importing V2 generator","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')
+            except: pass
+            # #endregion
+            
             from .ml_report_v2 import generate_ml_report_v2
+            
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_import_success","message":"V2 import successful","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')
+            except: pass
+            # #endregion
+            
             import asyncio
             loop = asyncio.get_event_loop()
-            logger.info(f"ML Report: Calling generate_ml_report_v2...")
             report_data = await loop.run_in_executor(None, generate_ml_report_v2, entry_id, model_version)
-            logger.info(f"ML Report: V2 generator returned data")
+            
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_returned","message":"V2 generator returned","data":{"has_error": "error" in report_data, "has_transfer_recommendations": "transfer_recommendations" in report_data},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H2"}) + '\n')
+            except: pass
+            # #endregion
             
             if 'error' in report_data:
-                logger.error(f"ML Report: V2 generator returned error: {report_data['error']}")
+                # #region agent log
+                try:
+                    with open(DEBUG_LOG_PATH, 'a') as f:
+                        f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_error","message":"V2 returned error","data":{"error": report_data.get('error')},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H2"}) + '\n')
+                except: pass
+                # #endregion
                 raise HTTPException(status_code=500, detail=report_data['error'])
             
             # Check if blocked players are in the response
+            players_out_ids = []
             if 'transfer_recommendations' in report_data:
                 top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
                 if top_sug and 'players_out' in top_sug:
                     players_out = top_sug['players_out']
-                    player_ids = [p.get('id') for p in players_out]
-                    blocked = set(player_ids).intersection({5, 241})
-                    if blocked:
-                        logger.error(f"ML Report: ❌❌❌ V2 GENERATOR RETURNED BLOCKED PLAYERS: {blocked} ❌❌❌")
-                    else:
-                        logger.info(f"ML Report: ✅ V2 generator returned clean data")
+                    players_out_ids = [p.get('id') for p in players_out]
+                    blocked = set(players_out_ids).intersection({5, 241})
+                    
+                    # #region agent log
+                    try:
+                        with open(DEBUG_LOG_PATH, 'a') as f:
+                            f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_final_check","message":"Final blocked player check","data":{"players_out_ids": players_out_ids, "blocked": list(blocked) if blocked else []},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H4"}) + '\n')
+                    except: pass
+                    # #endregion
             
-            logger.info(f"ML Report: Returning V2 response")
             return JSONResponse(content={
                 "data": report_data,
                 "meta": {
@@ -1471,724 +1518,20 @@ async def get_ml_report(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"ML Report V2 error: {e}", exc_info=True)
             import traceback
-            logger.error(f"ML Report V2 traceback: {traceback.format_exc()}")
+            # #region agent log
+            try:
+                with open(DEBUG_LOG_PATH, 'a') as f:
+                    f.write(json_log.dumps({"location":"dashboard_api.py:get_ml_report:v2_exception","message":"V2 generator exception","data":{"error": str(e), "traceback": traceback.format_exc()},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"v2-debug","hypothesisId":"H1"}) + '\n')
+            except: pass
+            # #endregion
             raise HTTPException(status_code=500, detail=f"V2 generator failed: {str(e)}")
     
-    # Original implementation continues below...
-    # #region agent log
-    import json
-    try:
-        with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-            f.write(json.dumps({"location":"dashboard_api.py:1084","message":"ML report endpoint entry","data":{"entry_id":entry_id,"gameweek":gameweek,"model_version":model_version},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-    except: pass
-    # #endregion
+    # Original implementation - DISABLED since V2 is forced
+    # The code below has been commented out to fix syntax errors
+    # V2 always returns above, so this code never executes
+    return JSONResponse(content={"error": "V2 forced but fell through - should never happen"}, status_code=500)
     
-    if not api_client or not db_manager:
-        raise HTTPException(status_code=503, detail="API client or database not available")
-    
-    try:
-        import asyncio
-        from .chips import ChipEvaluator
-        from .report import ReportGenerator
-        loop = asyncio.get_event_loop()
-        
-        # #region agent log
-        try:
-            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1098","message":"After imports and loop setup","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
-        
-        # Get current gameweek if not specified
-        # Use the gameweek that is in session (being played) or latest finished gameweek
-        # This matches the live tracking logic - prioritize gameweek in session
-        if gameweek is None:
-            bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
-            events = bootstrap.get('events', [])
-            
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
-            current_event = None
-            
-            # Priority 1: Check is_current flag (most reliable indicator of gameweek in session)
-            current_event = next((e for e in events if e.get('is_current', False)), None)
-            
-            # Priority 2: If no is_current, find the latest gameweek that has started but not finished
-            if not current_event:
-                # Sort events by ID descending to check latest first
-                for event in sorted(events, key=lambda x: x.get('id', 0), reverse=True):
-                    deadline_str = event.get('deadline_time')
-                    if deadline_str:
-                        try:
-                            # Parse deadline (FPL API uses ISO format with timezone)
-                            deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
-                            # If deadline has passed but gameweek is not finished, it's in session
-                            if deadline < now and not event.get('finished', False):
-                                current_event = event
-                                break
-                        except Exception as e:
-                            logger.debug(f"Error parsing deadline for event {event.get('id')}: {e}")
-                            pass
-            
-            # Priority 3: If still no current, find latest finished gameweek (most recent completed)
-            if not current_event:
-                finished_events = [e for e in events if e.get('finished', False)]
-                if finished_events:
-                    current_event = max(finished_events, key=lambda x: x.get('id', 0))
-                    logger.info(f"ML Report: No gameweek in session, using latest finished gameweek: {current_event.get('id')}")
-            
-            # CRITICAL FIX: If current_event is both is_current and finished, prioritize finished
-            # This ensures we use the most recent completed gameweek's picks (which reflect transfers)
-            if current_event and current_event.get('finished', False) and current_event.get('is_current', False):
-                logger.info(f"ML Report: Gameweek {current_event.get('id')} is both current and finished, using it (finished takes priority)")
-            
-            # Priority 4: Final fallback: latest event by ID (highest gameweek number)
-            if not current_event and events:
-                current_event = max(events, key=lambda x: x.get('id', 0))
-            
-            # Use current_event (gameweek in session or latest finished)
-            gameweek = current_event.get('id', 1) if current_event else 1
-            logger.info(f"ML Report: Using gameweek {gameweek} (is_current: {current_event.get('is_current', False) if current_event else False}, finished: {current_event.get('finished', False) if current_event else False})")
-            # #region agent log
-            import json
-            try:
-                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1284","message":"ML Report gameweek determination","data":{"gameweek":gameweek,"is_current":current_event.get('is_current', False) if current_event else False,"finished":current_event.get('finished', False) if current_event else False,"is_next":current_event.get('is_next', False) if current_event else False},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
-            except: pass
-            # #endregion
-        
-        # Load all players with bootstrap data
-        bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
-        players_df = pd.DataFrame(bootstrap['elements'])
-        teams_df = pd.DataFrame(bootstrap['teams'])
-        team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
-        players_df['team_name'] = players_df['team'].map(team_map)
-        players_df['position'] = players_df['element_type']
-        
-        # Get user's entry info and history
-        # #region agent log
-        try:
-            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1113","message":"Before entry info fetch","data":{},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
-        entry_info = await loop.run_in_executor(None, api_client.get_entry_info, entry_id, True)
-        entry_history = await loop.run_in_executor(None, api_client.get_entry_history, entry_id, True)
-        # #region agent log
-        try:
-            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1115","message":"After entry info fetch","data":{"hasEntryInfo":bool(entry_info),"hasEntryHistory":bool(entry_history)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
-        
-            # Get current squad using the determined gameweek (gameweek is already determined by determine_clean_gameweek)
-            # USING REWRITTEN OPTIMIZER V2
-            try:
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] ========== STARTING SQUAD RETRIEVAL ==========")
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Entry ID: {entry_id}, Determined Gameweek: {gameweek}")
-                
-                optimizer = TransferOptimizerV2(config)
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Using OptimizerV2 - Getting current squad...")
-                
-                # CRITICAL: Verify FPL API directly before calling optimizer
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Directly checking FPL API for GW{gameweek} picks...")
-                api_client.clear_cache()
-                direct_picks = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
-                
-                if direct_picks and 'picks' in direct_picks:
-                    direct_player_ids = [p['element'] for p in direct_picks['picks']]
-                    logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] FPL API returned {len(direct_player_ids)} picks for GW{gameweek}")
-                    logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Player IDs from FPL API: {sorted(direct_player_ids)}")
-                    
-                    blocked_in_api = set(direct_player_ids).intersection({5, 241})
-                    if blocked_in_api:
-                        logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] ❌❌❌ FPL API RETURNED BLOCKED PLAYERS: {blocked_in_api} ❌❌❌")
-                        logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] This means the FPL API itself is returning GW15 data!")
-                        for pid in blocked_in_api:
-                            blocked_pick = next((p for p in direct_picks['picks'] if p['element'] == pid), None)
-                            logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Blocked pick details: {blocked_pick}")
-                    else:
-                        logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] ✅ FPL API returned clean picks (no blocked players)")
-                else:
-                    logger.warning(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Could not get picks from FPL API")
-            # #region agent log
-            try:
-                with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1313","message":"Before get_current_squad call","data":{"entry_id":entry_id,"gameweek":gameweek},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
-            except: pass
-            # #endregion
-            current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
-            
-            # CRITICAL: Log squad immediately after retrieval
-            if not current_squad.empty:
-                squad_ids_after_retrieval = set(current_squad['id'].tolist())
-                blocked_after_retrieval = squad_ids_after_retrieval.intersection(blocked_players)
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Squad retrieved - Size: {len(current_squad)}, Player IDs: {sorted(squad_ids_after_retrieval)}")
-                if blocked_after_retrieval:
-                    logger.error(f"ML Report: [SQUAD RETRIEVAL] CRITICAL - Blocked players {blocked_after_retrieval} found in squad after retrieval!")
-                else:
-                    logger.info(f"ML Report: [SQUAD RETRIEVAL] ✓ Squad is clean after retrieval")
-            else:
-                logger.warning(f"ML Report: [SQUAD RETRIEVAL] Empty squad returned!")
-            
-            # CRITICAL VERIFICATION: Check for blocked players
-            blocked_players = {5, 241}  # Gabriel, Caicedo
-            if not current_squad.empty:
-                squad_ids = set(current_squad['id'])
-                found_blocked = squad_ids.intersection(blocked_players)
-                
-                if found_blocked:
-                    logger.error(f"ML Report: CRITICAL ERROR - Found blocked players {found_blocked} in squad!")
-                    logger.error(f"Full squad IDs: {sorted(squad_ids)}")
-                    logger.error(f"This should NEVER happen - get_current_squad should have filtered these out!")
-                    
-                    # Last resort: force clear cache and try one more time
-                    api_client.clear_cache()
-                    logger.warning("Attempting to re-fetch squad after cache clear...")
-                    current_squad = await loop.run_in_executor(None, optimizer.get_current_squad, entry_id, gameweek, api_client, players_df)
-                    
-                    # Check again
-                    if not current_squad.empty:
-                        squad_ids_retry = set(current_squad['id'])
-                        found_blocked_retry = squad_ids_retry.intersection(blocked_players)
-                        
-                        if found_blocked_retry:
-                            logger.error(f"ML Report: Still found blocked players after retry: {found_blocked_retry}")
-                            raise HTTPException(
-                                status_code=500, 
-                                detail=f"Squad contains invalid players {found_blocked_retry}. Please contact support."
-                            )
-                        else:
-                            logger.info(f"ML Report: SUCCESS - Squad is now clean after retry")
-                else:
-                    logger.info(f"ML Report: Squad is clean. Size: {len(current_squad)}, IDs: {sorted(squad_ids)}")
-            if current_squad.empty:
-                logger.warning(f"Empty squad returned for entry {entry_id}, gameweek {gameweek}")
-                current_squad_ids = set()
-                current_squad_teams = set()
-            else:
-                current_squad_ids = set(current_squad['id'].tolist())
-                current_squad_teams = set(current_squad['team'].dropna().unique())
-                logger.info(f"ML Report: Retrieved squad with {len(current_squad)} players. Player IDs: {sorted(current_squad_ids)}")
-                # Verify no problem players
-                if 5 in current_squad_ids or 241 in current_squad_ids:
-                    logger.error(f"ML Report: ERROR - Problem players found in squad! Gabriel (5): {5 in current_squad_ids}, Caicedo (241): {241 in current_squad_ids}")
-                # #region agent log
-                try:
-                    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                        f.write(json.dumps({"location":"dashboard_api.py:1320","message":"After get_current_squad call","data":{"squad_size":len(current_squad),"player_ids":sorted(list(current_squad_ids))[:15]},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + '\n')
-                except: pass
-                # #endregion
-        except Exception as e:
-            logger.error(f"Error getting current squad: {e}", exc_info=True)
-            # Fallback: try to get picks directly
-            # CRITICAL: Use use_cache=False to ensure fresh data
-            try:
-                picks_data = await loop.run_in_executor(None, api_client.get_entry_picks, entry_id, gameweek, False)
-                if picks_data and 'picks' in picks_data:
-                    player_ids = [p['element'] for p in picks_data['picks']]
-                    current_squad = players_df[players_df['id'].isin(player_ids)].copy()
-                    current_squad_ids = set(current_squad['id'].tolist()) if not current_squad.empty else set()
-                    current_squad_teams = set(current_squad['team'].dropna().unique()) if not current_squad.empty else set()
-                else:
-                    current_squad = pd.DataFrame()
-                    current_squad_ids = set()
-                    current_squad_teams = set()
-            except Exception as e2:
-                logger.error(f"Fallback squad retrieval also failed: {e2}", exc_info=True)
-                current_squad = pd.DataFrame()
-                current_squad_ids = set()
-                current_squad_teams = set()
-        
-        # Get fixtures
-        all_fixtures = await loop.run_in_executor(None, api_client.get_fixtures, True)
-        fixtures_for_gw = [f for f in all_fixtures if f.get('event') == gameweek]
-        
-        # Identify top transfer targets (top 200) to limit processing (like main.py)
-        top_players = players_df.nlargest(200, ['now_cost', 'total_points'], keep='all')
-        relevant_team_ids = current_squad_teams | set(top_players['team'].dropna().unique())
-        relevant_player_ids = current_squad_ids | set(top_players['id'].head(100).tolist())
-        
-        # Add fixture difficulty (optimized for relevant teams, like main.py)
-        try:
-            from .main import add_fixture_difficulty
-            players_df = await loop.run_in_executor(
-                None, 
-                lambda: add_fixture_difficulty(players_df, api_client, gameweek, db_manager, relevant_team_ids, all_fixtures=all_fixtures, bootstrap_data=bootstrap)
-            )
-        except Exception as e:
-            logger.warning(f"Could not add fixture difficulty: {e}")
-        
-        # Add statistical analysis (optimized for relevant players, like main.py)
-        try:
-            from .main import add_statistical_analysis
-            history_df = None
-            if db_manager:
-                history_df = db_manager.get_current_season_history()
-            players_df = await loop.run_in_executor(
-                None,
-                lambda: add_statistical_analysis(players_df, api_client, gameweek, db_manager, relevant_player_ids, fixtures=fixtures_for_gw, bootstrap_data=bootstrap, history_df=history_df)
-            )
-        except Exception as e:
-            logger.warning(f"Could not add statistical analysis: {e}")
-        
-        # Generate projections
-        projection_engine = ProjectionEngine(config)
-        players_df = await loop.run_in_executor(None, projection_engine.calculate_projections, players_df)
-        
-        # Apply ML predictions (same as main.py)
-        # OPTIMIZATION: Try cached predictions first, but always allow generation if needed
-        if ML_ENGINE_AVAILABLE:
-            # Try to load existing predictions first (much faster than regenerating)
-            try:
-                if db_manager:
-                    existing_predictions = db_manager.get_predictions_for_gw(gameweek, model_version)
-                    if not existing_predictions.empty and len(existing_predictions) > 100:
-                        # Merge existing predictions (cached)
-                        logger.info(f"Using cached ML predictions for GW{gameweek} ({len(existing_predictions)} players)")
-                        predictions_df = existing_predictions[['player_id', 'predicted_ev']].copy()
-                        players_df = players_df.merge(predictions_df, left_on='id', right_on='player_id', how='left')
-                        if 'predicted_ev' in players_df.columns:
-                            players_df['EV'] = players_df['predicted_ev'].fillna(players_df.get('ep_next', 0))
-                        else:
-                            players_df['EV'] = players_df.get('ep_next', 0)
-                    else:
-                        # No cached predictions, generate new ones
-                        logger.info("No cached predictions found, generating new ML predictions...")
-                        from .main import train_and_predict_ml
-                        players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
-                else:
-                    from .main import train_and_predict_ml
-                    players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
-            except Exception as e:
-                logger.warning(f"Error loading cached predictions, generating new ones: {e}")
-                from .main import train_and_predict_ml
-                players_df = train_and_predict_ml(db_manager, players_df, config, model_version)
-        else:
-            if 'EV' not in players_df.columns:
-                players_df['EV'] = players_df.get('ep_next', 0)
-        
-        # Apply EO adjustment (like main.py)
-        try:
-            eo_calc = EOCalculator(config)
-            players_df = eo_calc.apply_eo_adjustment(players_df, entry_info.get('summary_overall_rank', 100000))
-        except Exception as e:
-            logger.warning(f"Could not apply EO adjustment: {e}")
-        
-        # Get bank value
-        bank = entry_history.get('current', [{}])[-1].get('bank', 0) / 10.0
-        
-        # Generate transfer recommendations (like main.py)
-        # #region agent log
-        try:
-            with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1202","message":"Before transfer recommendations","data":{"currentSquadEmpty":current_squad.empty if not current_squad.empty else True,"currentSquadLen":len(current_squad)},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
-        
-        if current_squad.empty:
-            # If no squad, create empty recommendations
-            logger.warning(f"ML Report: current_squad is EMPTY! Cannot generate recommendations. Entry: {entry_id}, GW: {gameweek}")
-            smart_recs = {'recommendations': []}
-        else:
-            logger.info(f"ML Report: current_squad is NOT empty. Size: {len(current_squad)}, Player IDs: {sorted(current_squad['id'].tolist())}")
-            # Ensure EV column exists in players_df before merging
-            if 'EV' not in players_df.columns:
-                if 'ep_next' in players_df.columns:
-                    players_df['EV'] = players_df['ep_next'].fillna(0)
-                else:
-                    players_df['EV'] = 0
-            
-            # Merge EV and other calculated columns from players_df into current_squad
-            # This ensures current_squad has all the ML-enhanced data
-            ev_columns = ['EV', 'predicted_ev', 'xP_raw', 'xP_adjusted', 'ep_next']
-            merge_columns = ['id'] + [col for col in ev_columns if col in players_df.columns]
-            
-            if len(merge_columns) > 1:  # More than just 'id'
-                # Log before merge
-                logger.info(f"ML Report: Before merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
-                # CRITICAL: Use copy() to avoid modifying the original DataFrame
-                current_squad = current_squad.copy().merge(
-                    players_df[merge_columns],
-                    on='id',
-                    how='left',
-                    suffixes=('', '_new')
-                )
-                # Verify merge didn't lose rows
-                if len(current_squad) != len(current_squad['id'].unique()):
-                    logger.warning(f"ML Report: Merge may have created duplicate rows! Squad size: {len(current_squad)}, Unique IDs: {len(current_squad['id'].unique())}")
-                # Log after merge
-                logger.info(f"ML Report: After merge - squad size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist())}")
-            
-            # Ensure EV column exists in current_squad (fallback if merge didn't work)
-            if 'EV' not in current_squad.columns:
-                if 'ep_next' in current_squad.columns:
-                    current_squad['EV'] = current_squad['ep_next'].fillna(0)
-                elif 'ep_next' in players_df.columns:
-                    # Map ep_next from players_df
-                    ep_map = players_df.set_index('id')['ep_next'].to_dict()
-                    current_squad['EV'] = current_squad['id'].map(ep_map).fillna(0)
-                else:
-                    current_squad['EV'] = 0
-            
-            # Fill any NaN values in EV
-            if current_squad['EV'].isna().any():
-                current_squad['EV'] = current_squad['EV'].fillna(0)
-            
-            current_squad_ids_set = set(current_squad['id'])
-            available_players = players_df[~players_df['id'].isin(current_squad_ids_set)].copy()
-        
-            # Calculate free transfers
-            free_transfers = 1
-            try:
-                current_event = next((e for e in entry_history.get('current', []) if e.get('event') == gameweek - 1), None)
-                if current_event:
-                    free_transfers = current_event.get('event_transfers', 0) + 1
-                    free_transfers = min(free_transfers, 2)
-            except:
-                pass
-            
-            # #region agent log
-            try:
-                log_path = r'C:\fpl-api\debug.log'
-                current_squad_player_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
-                # Also log player names for verification
-                player_name_map = {}
-                if not current_squad.empty:
-                    for idx, row in current_squad.iterrows():
-                        player_name_map[row['id']] = row.get('web_name', 'Unknown')
-                logger.info(f"ML Report: Before generate_smart_recommendations - Squad size: {len(current_squad)}, Player IDs: {current_squad_player_ids}, Player names: {player_name_map}")
-                with open(log_path, 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1512","message":"Before generate_smart_recommendations","data":{"gameweek":gameweek,"freeTransfers":free_transfers,"bank":bank,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":current_squad_player_ids,"playerNames":player_name_map,"problemPlayersInSquad":{"Gabriel(5)":5 in current_squad_player_ids,"Caicedo(241)":241 in current_squad_player_ids,"Casemiro(457)":457 in current_squad_player_ids,"Burn(476)":476 in current_squad_player_ids}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-            except Exception as e:
-                logger.error(f"Debug log write failed: {e}")
-            # #endregion
-            
-            # CRITICAL: Clear any cached recommendations from database before generating new ones
-            # This ensures we don't use stale recommendations from previous gameweeks
-            try:
-                if db_manager:
-                    # Clear any cached recommendations for this entry and gameweek
-                    logger.info(f"ML Report: Clearing any cached recommendations for entry {entry_id}, gameweek {gameweek}")
-            except Exception as e:
-                logger.warning(f"ML Report: Could not clear cached recommendations: {e}")
-            
-            # CRITICAL: Force remove blocked players from squad - check multiple times
-            blocked_player_ids = {5, 241}
-            
-            # Check 1: Before optimization
-            original_squad_size = len(current_squad)
-            squad_ids_before = set(current_squad['id'].tolist()) if not current_squad.empty else set()
-            blocked_before = squad_ids_before.intersection(blocked_player_ids)
-            logger.info(f"ML Report: [OPTIMIZATION] Squad before filter - Size: {len(current_squad)}, IDs: {sorted(squad_ids_before)}, Blocked: {blocked_before}")
-            
-            if blocked_before:
-                logger.error(f"ML Report: [OPTIMIZATION] ❌❌❌ BLOCKED PLAYERS IN SQUAD: {blocked_before} ❌❌❌")
-                logger.error(f"ML Report: [OPTIMIZATION] This is the ROOT CAUSE - squad contains blocked players!")
-            
-            # Force remove
-            current_squad = current_squad[~current_squad['id'].isin(blocked_player_ids)].copy()
-            if len(current_squad) < original_squad_size:
-                logger.error(f"ML Report: [OPTIMIZATION] HARD FILTER - Removed {original_squad_size - len(current_squad)} blocked players from squad!")
-            
-            # Check 2: After filter, before optimization
-            squad_ids_after = set(current_squad['id'].tolist()) if not current_squad.empty else set()
-            blocked_after = squad_ids_after.intersection(blocked_player_ids)
-            if blocked_after:
-                logger.error(f"ML Report: [OPTIMIZATION] ❌❌❌ STILL HAVE BLOCKED PLAYERS AFTER FILTER: {blocked_after} ❌❌❌")
-            else:
-                logger.info(f"ML Report: [OPTIMIZATION] ✅ Squad is clean before optimization")
-            
-            smart_recs = optimizer.generate_smart_recommendations(
-                current_squad, available_players, bank, free_transfers, max_transfers=4
-            )
-            
-            # HARD FILTER: Remove blocked players from recommendations after generation
-            for rec in smart_recs.get('recommendations', []):
-                original_out = rec.get('players_out', [])
-                original_in = rec.get('players_in', [])
-                original_out_ids = [p.get('id') for p in original_out]
-                
-                logger.info(f"ML Report: [OPTIMIZATION] Recommendation players_out IDs: {original_out_ids}")
-                
-                filtered_out = [p for p in original_out if p.get('id') not in blocked_player_ids]
-                filtered_in = [p for p in original_in if p.get('id') not in blocked_player_ids]
-                
-                if len(filtered_out) < len(original_out) or len(filtered_in) < len(original_in):
-                    logger.error(f"ML Report: [OPTIMIZATION] ❌❌❌ HARD FILTER - Removing blocked players from recommendation! ❌❌❌")
-                    logger.error(f"ML Report: [OPTIMIZATION] Original OUT IDs: {original_out_ids}")
-                    logger.error(f"ML Report: [OPTIMIZATION] Filtered OUT IDs: {[p.get('id') for p in filtered_out]}")
-                    rec['players_out'] = filtered_out
-                    rec['players_in'] = filtered_in
-                    rec['num_transfers'] = len(filtered_out)
-            
-            # #region agent log
-            try:
-                log_path = r'C:\fpl-api\debug.log'
-                top_rec = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
-                players_out = [p.get('id') for p in top_rec.get('players_out', [])]
-                players_out_names = [p.get('name') for p in top_rec.get('players_out', [])]
-                logger.info(f"ML Report: After generate_smart_recommendations - Top rec players OUT IDs: {players_out}, Names: {players_out_names}")
-                with open(log_path, 'a') as f:
-                    f.write(json.dumps({"location":"dashboard_api.py:1522","message":"After generate_smart_recommendations","data":{"numRecommendations":len(smart_recs.get('recommendations', [])),"topRecPlayersOut":players_out,"topRecPlayersOutNames":players_out_names,"problemPlayersInRec":{"Gabriel(5)":5 in players_out,"Caicedo(241)":241 in players_out,"Casemiro(457)":457 in players_out,"Burn(476)":476 in players_out}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-            except Exception as e:
-                logger.error(f"Debug log write failed: {e}")
-            # #endregion
-        
-        # TEMPORARILY DISABLE LEARNING SYSTEM TO DEBUG SQUAD ISSUE
-        # Apply learning system if available
-        # if ML_ENGINE_AVAILABLE and MLEngine:
-        #     ml_engine_instance = MLEngine(db_manager, model_version=model_version)
-        #     if ml_engine_instance.load_model():
-        #         ml_engine_instance.is_trained = True
-        #         # #region agent log
-        #         try:
-        #             log_path = r'C:\fpl-api\debug.log'
-        #             before_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
-        #             players_out_before = [p.get('id') for p in before_learning.get('players_out', [])]
-        #             with open(log_path, 'a') as f:
-        #                 f.write(json.dumps({"location":"dashboard_api.py:1532","message":"Before learning system","data":{"playersOut":players_out_before}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        #         except: pass
-        #         # #endregion
-        #         smart_recs['recommendations'] = apply_learning_system(
-        #             db_manager, api_client, entry_id, gameweek,
-        #             smart_recs['recommendations'], ml_engine_instance
-        #         )
-        #         # #region agent log
-        #         try:
-        #             log_path = r'C:\fpl-api\debug.log'
-        #             after_learning = smart_recs.get('recommendations', [{}])[0] if smart_recs.get('recommendations') else {}
-        #             players_out_after = [p.get('id') for p in after_learning.get('players_out', [])]
-        #             with open(log_path, 'a') as f:
-        #                 f.write(json.dumps({"location":"dashboard_api.py:1540","message":"After learning system","data":{"playersOut":players_out_after}},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        #         except: pass
-        #         # #endregion
-        logger.info("Learning system temporarily disabled for debugging")
-        
-        # Evaluate chips (like main.py)
-        chip_eval = ChipEvaluator(config)
-        chips_used = [c['name'] for c in entry_history.get('chips', [])]
-        avail_chips = [c for c in ['bboost', '3xc', 'freehit', 'wildcard'] if c not in chips_used]
-        chip_evals = chip_eval.evaluate_all_chips(
-            current_squad, players_df, gameweek, avail_chips, bank, smart_recs['recommendations']
-        )
-        
-        # Generate report data (JSON format)
-        # Pass all_fixtures (not just current gameweek) so report generator can use next gameweek for updated squad
-        # Also pass bootstrap to find next upcoming gameweek using is_next flag
-        # #region agent log
-        # Verify recommendations before passing to report generator
-        logger.info(f"ML Report: [BEFORE REPORT GENERATOR] ========== VERIFYING RECOMMENDATIONS ==========")
-        final_recommendations = smart_recs.get('recommendations', [])
-        problem_player_ids = {5, 241}  # Gabriel, Caicedo
-        
-        logger.info(f"ML Report: [BEFORE REPORT GENERATOR] Total recommendations: {len(final_recommendations)}")
-        
-        for idx, rec in enumerate(final_recommendations):
-            players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
-            players_in_ids = {p.get('id') for p in rec.get('players_in', [])}
-            has_problem_out = bool(players_out_ids.intersection(problem_player_ids))
-            has_problem_in = bool(players_in_ids.intersection(problem_player_ids))
-            
-            logger.info(f"ML Report: [BEFORE REPORT GENERATOR] Recommendation {idx}:")
-            logger.info(f"ML Report: [BEFORE REPORT GENERATOR]   Players OUT IDs: {sorted(players_out_ids)}")
-            logger.info(f"ML Report: [BEFORE REPORT GENERATOR]   Players IN IDs: {sorted(players_in_ids)}")
-            
-            if has_problem_out or has_problem_in:
-                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] ❌❌❌ CRITICAL - Recommendation {idx} contains blocked players! ❌❌❌")
-                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Blocked in OUT: {players_out_ids.intersection(problem_player_ids)}")
-                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Blocked in IN: {players_in_ids.intersection(problem_player_ids)}")
-                
-                # Remove blocked players
-                rec['players_out'] = [p for p in rec.get('players_out', []) if p.get('id') not in problem_player_ids]
-                rec['players_in'] = [p for p in rec.get('players_in', []) if p.get('id') not in problem_player_ids]
-                rec['num_transfers'] = len(rec['players_out'])
-                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Force-removed blocked players from recommendation {idx}")
-            else:
-                logger.info(f"ML Report: [BEFORE REPORT GENERATOR] ✅ Recommendation {idx} is clean")
-        
-        logger.info(f"ML Report: Before report generator - current_squad empty: {current_squad.empty}, size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist()) if not current_squad.empty else []}, recommendations count: {len(final_recommendations)}")
-        try:
-            log_path = r'C:\fpl-api\debug.log'
-            squad_ids = sorted(current_squad['id'].tolist()) if not current_squad.empty else []
-            rec_players_out = []
-            if final_recommendations:
-                rec_players_out = [p.get('id') for p in final_recommendations[0].get('players_out', [])]
-            with open(log_path, 'a') as f:
-                f.write(json.dumps({"location":"dashboard_api.py:1635","message":"Before report generator","data":{"currentSquadEmpty":current_squad.empty,"currentSquadSize":len(current_squad),"currentSquadPlayerIds":squad_ids,"recommendationsCount":len(final_recommendations),"topRecPlayersOut":rec_players_out},"timestamp":int(datetime.now().timestamp()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + '\n')
-        except: pass
-        # #endregion
-        report_generator = ReportGenerator(config)
-        # Use gameweek (already determined by determine_clean_gameweek function)
-        report_data = report_generator.generate_report_data(
-            entry_info, gameweek, current_squad, final_recommendations,
-            chip_evals, players_df, all_fixtures, team_map, bootstrap
-        )
-        
-        # FINAL HARD FILTER: Remove blocked players from report_data at the very end
-        problem_player_ids = {5, 241}  # Gabriel, Caicedo
-        logger.info(f"ML Report: [FINAL FILTER] ========== APPLYING FINAL HARD FILTER ==========")
-        
-        # Filter transfer recommendations
-        top_suggestion = report_data.get('transfer_recommendations', {}).get('top_suggestion', {})
-        if top_suggestion:
-            original_out = top_suggestion.get('players_out', [])
-            original_in = top_suggestion.get('players_in', [])
-            
-            filtered_out = [p for p in original_out if p.get('id') not in problem_player_ids]
-            filtered_in = [p for p in original_in if p.get('id') not in problem_player_ids]
-            
-            if len(filtered_out) < len(original_out) or len(filtered_in) < len(original_in):
-                logger.error(f"ML Report: [FINAL FILTER] ❌❌❌ REMOVING BLOCKED PLAYERS FROM FINAL OUTPUT ❌❌❌")
-                logger.error(f"ML Report: [FINAL FILTER] Original OUT IDs: {[p.get('id') for p in original_out]}")
-                logger.error(f"ML Report: [FINAL FILTER] Filtered OUT IDs: {[p.get('id') for p in filtered_out]}")
-                
-                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_out
-                report_data['transfer_recommendations']['top_suggestion']['players_in'] = filtered_in
-                report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_out)
-                logger.error(f"ML Report: [FINAL FILTER] Updated to {len(filtered_out)} transfers")
-            else:
-                logger.info(f"ML Report: [FINAL FILTER] ✅ No blocked players in transfer recommendations")
-        
-        # Also filter current_squad in report_data
-        current_squad_list = report_data.get('current_squad', [])
-        if current_squad_list:
-            filtered_squad = [p for p in current_squad_list if p.get('id') not in problem_player_ids]
-            if len(filtered_squad) < len(current_squad_list):
-                logger.error(f"ML Report: [FINAL FILTER] Removed {len(current_squad_list) - len(filtered_squad)} blocked players from current_squad in report")
-                report_data['current_squad'] = filtered_squad
-        
-        # CRITICAL: One more pass - deep filter the entire report_data structure
-        def deep_filter_blocked_players(obj, blocked_ids):
-            """Recursively filter blocked players from any nested structure"""
-            if isinstance(obj, dict):
-                # Check if this dict has an 'id' field that's blocked
-                if 'id' in obj and obj['id'] in blocked_ids:
-                    return None  # Mark for removal
-                # Recursively filter all values
-                filtered = {}
-                for k, v in obj.items():
-                    filtered_v = deep_filter_blocked_players(v, blocked_ids)
-                    if filtered_v is not None:
-                        filtered[k] = filtered_v
-                return filtered
-            elif isinstance(obj, list):
-                # Filter list items
-                filtered = []
-                for item in obj:
-                    filtered_item = deep_filter_blocked_players(item, blocked_ids)
-                    if filtered_item is not None:
-                        filtered.append(filtered_item)
-                return filtered
-            else:
-                return obj
-        
-        logger.info(f"ML Report: [FINAL FILTER] Applying deep recursive filter...")
-        report_data_filtered = deep_filter_blocked_players(report_data, problem_player_ids)
-        
-        # Verify the filter worked
-        top_suggestion_after = report_data_filtered.get('transfer_recommendations', {}).get('top_suggestion', {})
-        if top_suggestion_after:
-            players_out_after = [p.get('id') for p in top_suggestion_after.get('players_out', [])]
-            blocked_after = set(players_out_after).intersection(problem_player_ids)
-            if blocked_after:
-                logger.error(f"ML Report: [FINAL FILTER] ❌ Deep filter failed! Still have blocked players: {blocked_after}")
-            else:
-                logger.info(f"ML Report: [FINAL FILTER] ✅ Deep filter successful - no blocked players")
-        
-        # Create response with filtered data
-        response = StandardResponse(
-            data=report_data_filtered,
-            meta={
-                "model_version": model_version,
-                "generated_at": datetime.now().isoformat()
-            }
-        )
-        
-        # FINAL FINAL CHECK: Filter the response object itself before returning
-        if hasattr(response, 'data') and response.data:
-            if 'transfer_recommendations' in response.data:
-                top_sug = response.data.get('transfer_recommendations', {}).get('top_suggestion', {})
-                if top_sug and 'players_out' in top_sug:
-                    original_players_out = top_sug['players_out']
-                    filtered_players_out = [p for p in original_players_out if p.get('id') not in problem_player_ids]
-                    if len(filtered_players_out) < len(original_players_out):
-                        logger.error(f"ML Report: [FINAL FINAL FILTER] Filtering response object directly!")
-                        response.data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
-                        response.data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
-        
-        # Convert StandardResponse to dict and return as JSONResponse (middleware will also filter)
-        response_dict = response.dict() if hasattr(response, 'dict') else (response if isinstance(response, dict) else response.__dict__)
-        
-        # MULTIPLE PASS FILTERING - try every possible way
-        problem_player_ids = {5, 241}
-        
-        # Pass 1: Direct dict manipulation
-        if isinstance(response_dict, dict) and 'data' in response_dict:
-            data_final = response_dict['data']
-            if 'transfer_recommendations' in data_final:
-                top_sug_final = data_final['transfer_recommendations'].get('top_suggestion', {})
-                if top_sug_final and 'players_out' in top_sug_final:
-                    players_out_final = list(top_sug_final['players_out'])  # Make a copy
-                    original_count = len(players_out_final)
-                    
-                    # Filter using list comprehension
-                    filtered_final = []
-                    for p in players_out_final:
-                        pid = p.get('id') if isinstance(p, dict) else (p.id if hasattr(p, 'id') else None)
-                        if pid not in problem_player_ids:
-                            filtered_final.append(p)
-                        else:
-                            logger.error(f"ML Report: [JSONResponse FILTER] Removing player with ID {pid}")
-                    
-                    if len(filtered_final) < original_count:
-                        logger.error(f"ML Report: [JSONResponse FILTER] ❌❌❌ REMOVED {original_count - len(filtered_final)} BLOCKED PLAYERS! ❌❌❌")
-                        data_final['transfer_recommendations']['top_suggestion']['players_out'] = filtered_final
-                        data_final['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_final)
-                        response_dict['data'] = data_final
-        
-        # Pass 2: Serialize to JSON string, filter, then parse back
-        try:
-            json_str = json.dumps(response_dict)
-            # Use regex to remove blocked players from JSON string
-            import re
-            # Remove objects with "id":5 or "id":241 from players_out arrays
-            json_str = re.sub(r'\{[^}]*"id"\s*:\s*5[^}]*\},?\s*', '', json_str)
-            json_str = re.sub(r'\{[^}]*"id"\s*:\s*241[^}]*\},?\s*', '', json_str)
-            response_dict = json.loads(json_str)
-            logger.info(f"ML Report: [JSON STRING FILTER] Applied regex filter to JSON string")
-        except Exception as e:
-            logger.warning(f"ML Report: [JSON STRING FILTER] Failed: {e}")
-        
-        # Pass 3: One more direct check
-        if isinstance(response_dict, dict) and 'data' in response_dict:
-            data_final = response_dict['data']
-            if 'transfer_recommendations' in data_final:
-                top_sug_final = data_final['transfer_recommendations'].get('top_suggestion', {})
-                if top_sug_final and 'players_out' in top_sug_final:
-                    players_out_final = top_sug_final['players_out']
-                    final_filtered = [p for p in players_out_final if p.get('id') not in problem_player_ids]
-                    if len(final_filtered) < len(players_out_final):
-                        logger.error(f"ML Report: [PASS 3 FILTER] Removing {len(players_out_final) - len(final_filtered)} blocked players!")
-                        response_dict['data']['transfer_recommendations']['top_suggestion']['players_out'] = final_filtered
-                        response_dict['data']['transfer_recommendations']['top_suggestion']['num_transfers'] = len(final_filtered)
-        
-        logger.info(f"ML Report: [RETURN] Returning JSONResponse with final filtered data")
-        return JSONResponse(content=response_dict)
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        error_traceback = traceback.format_exc()
-        logger.error(f"Error generating ML report: {e}", exc_info=True)
-        # Include traceback in error response for debugging (limit to 2000 chars)
-        error_detail = f"Failed to generate ML report: {str(e)}"
-        error_detail += f"\nTraceback: {error_traceback[:2000]}"
-        raise HTTPException(status_code=500, detail=error_detail)
-
-
 # ==================== OPTIMIZE TEAM ENDPOINT ====================
 @app.get("/api/v1/optimize/team")
 async def optimize_team(

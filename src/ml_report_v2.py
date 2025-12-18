@@ -6,6 +6,8 @@ import pandas as pd
 import requests
 from typing import Dict, List, Optional
 import logging
+import os
+import json
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -13,10 +15,34 @@ logger = logging.getLogger(__name__)
 # CRITICAL: Blocked players that should NEVER appear
 BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
 
+# Debug log path
+DEBUG_LOG_PATH = r'/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+
+def debug_log(location: str, message: str, data: dict = None, hypothesis_id: str = "V2"):
+    """Write debug log to file"""
+    try:
+        log_entry = {
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "v2-debug",
+            "hypothesisId": hypothesis_id
+        }
+        with open(DEBUG_LOG_PATH, 'a') as f:
+            f.write(json.dumps(log_entry) + '\n')
+    except Exception as e:
+        logger.error(f"Debug log write failed: {e}")
+
 def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
     """Direct FPL API call to get picks - no caching, no wrapper"""
     url = f"https://fantasy.premierleague.com/api/entry/{entry_id}/event/{gameweek}/picks/"
-    logger.info(f"ML Report V2: [FPL API] Fetching picks from: {url}")
+    
+    # #region agent log
+    debug_log("ml_report_v2.py:get_fpl_picks_direct", f"Fetching picks from FPL API", {"entry_id": entry_id, "gameweek": gameweek, "url": url}, "H1")
+    # #endregion
+    
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -24,33 +50,31 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
             picks = data.get('picks', [])
             player_ids = [p['element'] for p in picks]
             
-            logger.info(f"ML Report V2: [FPL API] Raw response - {len(player_ids)} picks")
-            logger.info(f"ML Report V2: [FPL API] Player IDs: {sorted(player_ids)}")
+            # #region agent log
+            debug_log("ml_report_v2.py:get_fpl_picks_direct", f"FPL API returned picks", {"player_ids": sorted(player_ids), "count": len(player_ids)}, "H1")
+            # #endregion
             
             # IMMEDIATELY filter blocked players
             blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
             filtered_ids = [pid for pid in player_ids if pid not in BLOCKED_PLAYER_IDS]
             
-            if len(filtered_ids) < len(player_ids):
-                logger.error(f"ML Report V2: [FPL API] ❌❌❌ BLOCKED PLAYERS FOUND: {blocked_found} ❌❌❌")
-                logger.error(f"ML Report V2: [FPL API] Original IDs: {sorted(player_ids)}")
-                logger.error(f"ML Report V2: [FPL API] Filtered IDs: {sorted(filtered_ids)}")
-            else:
-                logger.info(f"ML Report V2: [FPL API] ✅ No blocked players in FPL API response")
+            if blocked_found:
+                # #region agent log
+                debug_log("ml_report_v2.py:get_fpl_picks_direct", f"BLOCKED PLAYERS FOUND IN FPL API!", {"blocked": list(blocked_found), "original_ids": sorted(player_ids), "filtered_ids": sorted(filtered_ids)}, "H1")
+                # #endregion
             
             # Return filtered picks
             filtered_picks = [p for p in picks if p['element'] in filtered_ids]
-            logger.info(f"ML Report V2: [FPL API] Returning {len(filtered_picks)} filtered picks")
             return filtered_picks
         else:
-            logger.error(f"ML Report V2: [FPL API] Error {response.status_code}")
+            debug_log("ml_report_v2.py:get_fpl_picks_direct", f"FPL API error", {"status_code": response.status_code}, "H1")
             return []
     except Exception as e:
-        logger.error(f"ML Report V2: [FPL API] Exception: {e}", exc_info=True)
+        debug_log("ml_report_v2.py:get_fpl_picks_direct", f"Exception", {"error": str(e)}, "H1")
         return []
 
 def determine_gameweek(entry_id: int) -> int:
-    """Determine current gameweek from FPL API, verifying it doesn't contain blocked players"""
+    """Determine current gameweek from FPL API"""
     try:
         response = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
         if response.status_code == 200:
@@ -67,35 +91,15 @@ def determine_gameweek(entry_id: int) -> int:
                 if finished:
                     initial_gw = max(finished, key=lambda x: x.get('id', 0)).get('id', 1)
                 else:
-                    if events:
-                        initial_gw = max(events, key=lambda x: x.get('id', 0)).get('id', 1)
-                    else:
-                        return 16
+                    initial_gw = 16
             
-            # CRITICAL: Verify this gameweek doesn't contain blocked players
-            logger.info(f"ML Report V2: Checking GW{initial_gw} for blocked players...")
-            picks = get_fpl_picks_direct(entry_id, initial_gw)
-            player_ids = [p['element'] for p in picks]
-            blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
-            
-            if blocked_found:
-                logger.error(f"ML Report V2: GW{initial_gw} contains blocked players {blocked_found}!")
-                # Try next gameweek
-                next_gw = initial_gw + 1
-                logger.info(f"ML Report V2: Trying GW{next_gw}...")
-                picks_next = get_fpl_picks_direct(entry_id, next_gw)
-                player_ids_next = [p['element'] for p in picks_next]
-                blocked_next = set(player_ids_next).intersection(BLOCKED_PLAYER_IDS)
-                
-                if not blocked_next and picks_next:
-                    logger.info(f"ML Report V2: ✅ GW{next_gw} is clean, using it instead")
-                    return next_gw
-                else:
-                    logger.error(f"ML Report V2: GW{next_gw} also has issues, using GW{initial_gw} anyway")
+            # #region agent log
+            debug_log("ml_report_v2.py:determine_gameweek", f"Determined gameweek", {"gameweek": initial_gw}, "H1")
+            # #endregion
             
             return initial_gw
     except Exception as e:
-        logger.error(f"ML Report V2: Error determining gameweek: {e}")
+        debug_log("ml_report_v2.py:determine_gameweek", f"Error", {"error": str(e)}, "H1")
     
     return 16  # Fallback
 
@@ -104,31 +108,36 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     Generate ML report using a completely new, simplified approach.
     This bypasses all existing code paths to ensure clean data flow.
     """
-    logger.info(f"ML Report V2: Starting report generation for entry {entry_id}")
+    # #region agent log
+    debug_log("ml_report_v2.py:generate_ml_report_v2", f"V2 GENERATOR STARTED", {"entry_id": entry_id, "model_version": model_version}, "H2")
+    # #endregion
     
-    # Step 1: Determine gameweek (with verification)
+    # Step 1: Determine gameweek
     gameweek = determine_gameweek(entry_id)
-    logger.info(f"ML Report V2: Using gameweek {gameweek}")
+    
+    # #region agent log
+    debug_log("ml_report_v2.py:generate_ml_report_v2:step1", f"Using gameweek", {"gameweek": gameweek}, "H2")
+    # #endregion
     
     # Step 2: Get picks DIRECTLY from FPL API
     picks = get_fpl_picks_direct(entry_id, gameweek)
     if not picks:
-        logger.error(f"ML Report V2: No picks retrieved for entry {entry_id}, GW{gameweek}")
         return {"error": "No picks data available"}
     
     player_ids = [p['element'] for p in picks]
-    logger.info(f"ML Report V2: Retrieved {len(player_ids)} players: {sorted(player_ids)}")
+    
+    # #region agent log
+    debug_log("ml_report_v2.py:generate_ml_report_v2:step2", f"Retrieved picks", {"player_ids": sorted(player_ids), "count": len(player_ids)}, "H2")
+    # #endregion
     
     # Verify no blocked players
     blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
     if blocked_found:
-        logger.error(f"ML Report V2: ❌❌❌ BLOCKED PLAYERS STILL PRESENT: {blocked_found} ❌❌❌")
-        # Force remove
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step2", f"BLOCKED PLAYERS IN PICKS!", {"blocked": list(blocked_found)}, "H2")
+        # #endregion
         picks = [p for p in picks if p['element'] not in BLOCKED_PLAYER_IDS]
         player_ids = [p['element'] for p in picks]
-        logger.error(f"ML Report V2: Force-removed. New player IDs: {sorted(player_ids)}")
-    else:
-        logger.info(f"ML Report V2: ✅ No blocked players in picks")
     
     # Step 3: Get bootstrap data
     try:
@@ -138,7 +147,6 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         else:
             return {"error": "Failed to get bootstrap data"}
     except Exception as e:
-        logger.error(f"ML Report V2: Error getting bootstrap: {e}")
         return {"error": str(e)}
     
     # Step 4: Build current squad DataFrame
@@ -147,44 +155,46 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
     players_df['team_name'] = players_df['team'].map(team_map)
     
-    # Filter to only players in picks (already filtered for blocked players)
+    # Filter to only players in picks
     current_squad = players_df[players_df['id'].isin(player_ids)].copy()
     
-    # FINAL CHECK: Ensure no blocked players
-    squad_ids = set(current_squad['id'].tolist())
-    blocked_in_squad = squad_ids.intersection(BLOCKED_PLAYER_IDS)
-    if blocked_in_squad:
-        logger.error(f"ML Report V2: ❌❌❌ BLOCKED PLAYERS IN SQUAD DF: {blocked_in_squad} ❌❌❌")
-        current_squad = current_squad[~current_squad['id'].isin(BLOCKED_PLAYER_IDS)].copy()
-        logger.error(f"ML Report V2: Force-removed from DataFrame. New size: {len(current_squad)}")
+    # #region agent log
+    debug_log("ml_report_v2.py:generate_ml_report_v2:step4", f"Built squad DataFrame", {"squad_ids": sorted(current_squad['id'].tolist()), "count": len(current_squad)}, "H2")
+    # #endregion
     
-    logger.info(f"ML Report V2: Current squad size: {len(current_squad)}, IDs: {sorted(current_squad['id'].tolist())}")
-    
-        # Step 5: Import and use optimizer (but with our clean squad)
-        try:
-            from src.optimizer_v2 import TransferOptimizerV2
-            from src.report import ReportGenerator
-            from src.chip_evaluator import ChipEvaluator
+    # Step 5: Import and use optimizer
+    try:
+        from .optimizer_v2 import TransferOptimizerV2
+        from .report import ReportGenerator
+        from .chips import ChipEvaluator
+        
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Imports successful", {}, "H2")
+        # #endregion
         
         # Create optimizer
         config = {"optimizer": {"points_hit_per_transfer": -4}}
         optimizer = TransferOptimizerV2(config)
         
-        # Get available players (all players except current squad)
+        # Get available players
         available_players = players_df[~players_df['id'].isin(player_ids)].copy()
         
-        # Get entry info for bank and free transfers
+        # Get entry info
         entry_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/", timeout=10)
         if entry_response.status_code == 200:
             entry_info = entry_response.json()
-            bank = entry_info.get('last_deadline_bank', 0) / 10.0  # Convert to millions
-            free_transfers = 1  # Default
+            bank = entry_info.get('last_deadline_bank', 0) / 10.0
+            free_transfers = 1
         else:
+            entry_info = {}
             bank = 0.0
             free_transfers = 1
         
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Before optimization", {"squad_ids": sorted(current_squad['id'].tolist()), "bank": bank}, "H3")
+        # #endregion
+        
         # Generate recommendations with CLEAN squad
-        logger.info(f"ML Report V2: Generating recommendations with clean squad...")
         smart_recs = optimizer.generate_smart_recommendations(
             current_squad, available_players, bank, free_transfers, max_transfers=4
         )
@@ -193,79 +203,68 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         recommendations = smart_recs.get('recommendations', [])
         filtered_recommendations = []
         
-        for rec in recommendations:
+        for idx, rec in enumerate(recommendations):
             players_out = rec.get('players_out', [])
             players_in = rec.get('players_in', [])
+            
+            players_out_ids = [p.get('id') for p in players_out]
+            
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Recommendation {idx} before filter", {"players_out_ids": players_out_ids}, "H4")
+            # #endregion
             
             # Filter blocked players
             filtered_out = [p for p in players_out if p.get('id') not in BLOCKED_PLAYER_IDS]
             filtered_in = [p for p in players_in if p.get('id') not in BLOCKED_PLAYER_IDS]
             
-            if len(filtered_out) < len(players_out) or len(filtered_in) < len(players_in):
-                logger.error(f"ML Report V2: ❌❌❌ REMOVED BLOCKED PLAYERS FROM RECOMMENDATION! ❌❌❌")
-                logger.error(f"ML Report V2: Original OUT IDs: {[p.get('id') for p in players_out]}")
-                logger.error(f"ML Report V2: Filtered OUT IDs: {[p.get('id') for p in filtered_out]}")
+            blocked_in_rec = set(players_out_ids).intersection(BLOCKED_PLAYER_IDS)
+            if blocked_in_rec:
+                # #region agent log
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"BLOCKED PLAYERS IN RECOMMENDATION {idx}!", {"blocked": list(blocked_in_rec)}, "H4")
+                # #endregion
             
             rec['players_out'] = filtered_out
             rec['players_in'] = filtered_in
             rec['num_transfers'] = len(filtered_out)
             filtered_recommendations.append(rec)
         
-        smart_recs['recommendations'] = filtered_recommendations
-        
         # Generate chip evaluations
         chip_eval = ChipEvaluator(config)
-        avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']  # Simplified
+        avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']
         chip_evals = chip_eval.evaluate_all_chips(
             current_squad, players_df, gameweek, avail_chips, bank, filtered_recommendations
         )
         
         # Generate report data
-        logger.info(f"ML Report V2: [STEP 6] Generating report data...")
-        logger.info(f"ML Report V2: [STEP 6] Passing {len(filtered_recommendations)} filtered recommendations to report generator")
-        if filtered_recommendations:
-            top_rec = filtered_recommendations[0]
-            logger.info(f"ML Report V2: [STEP 6] Top recommendation players_out IDs: {[p.get('id') for p in top_rec.get('players_out', [])]}")
-        
         report_gen = ReportGenerator(config)
         report_data = report_gen.generate_report_data(
             entry_info, gameweek, current_squad, filtered_recommendations,
             chip_evals, players_df, None, team_map, bootstrap
         )
         
-        logger.info(f"ML Report V2: [STEP 6] Report generator returned data")
+        # #region agent log
         if 'transfer_recommendations' in report_data:
             top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
             if top_sug and 'players_out' in top_sug:
-                players_out_ids_after_report = [p.get('id') for p in top_sug['players_out']]
-                logger.info(f"ML Report V2: [STEP 6] Report data players_out IDs: {players_out_ids_after_report}")
-                blocked_after_report = set(players_out_ids_after_report).intersection(BLOCKED_PLAYER_IDS)
-                if blocked_after_report:
-                    logger.error(f"ML Report V2: [STEP 6] ❌❌❌ REPORT GENERATOR ADDED BLOCKED PLAYERS BACK: {blocked_after_report} ❌❌❌")
-                else:
-                    logger.info(f"ML Report V2: [STEP 6] ✅ Report data is clean after report generator")
+                report_out_ids = [p.get('id') for p in top_sug['players_out']]
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step6", f"Report generator output", {"players_out_ids": report_out_ids}, "H3")
+        # #endregion
         
-        # FINAL FILTER: Remove blocked players from report_data - MULTIPLE PASSES
-        # Pass 1: Transfer recommendations
+        # FINAL FILTER: Remove blocked players from report_data
         if 'transfer_recommendations' in report_data:
             top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
             if top_sug and 'players_out' in top_sug:
                 players_out = top_sug['players_out']
                 filtered_players_out = [p for p in players_out if p.get('id') not in BLOCKED_PLAYER_IDS]
-                if len(filtered_players_out) < len(players_out):
-                    logger.error(f"ML Report V2: ❌❌❌ FINAL FILTER - Removed {len(players_out) - len(filtered_players_out)} blocked players from report_data! ❌❌❌")
-                    report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
-                    report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
+                blocked_in_final = set([p.get('id') for p in players_out]).intersection(BLOCKED_PLAYER_IDS)
+                if blocked_in_final:
+                    # #region agent log
+                    debug_log("ml_report_v2.py:generate_ml_report_v2:final", f"BLOCKED PLAYERS IN FINAL OUTPUT!", {"blocked": list(blocked_in_final)}, "H3")
+                    # #endregion
+                report_data['transfer_recommendations']['top_suggestion']['players_out'] = filtered_players_out
+                report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(filtered_players_out)
         
-        # Pass 2: Current squad in report_data
-        if 'current_squad' in report_data:
-            current_squad_list = report_data['current_squad']
-            filtered_squad = [p for p in current_squad_list if p.get('id') not in BLOCKED_PLAYER_IDS]
-            if len(filtered_squad) < len(current_squad_list):
-                logger.error(f"ML Report V2: ❌❌❌ Removed {len(current_squad_list) - len(filtered_squad)} blocked players from current_squad in report_data! ❌❌❌")
-                report_data['current_squad'] = filtered_squad
-        
-        # Pass 3: Deep recursive filter on entire report_data
+        # Deep recursive filter
         def deep_filter(obj):
             if isinstance(obj, dict):
                 if 'id' in obj and obj['id'] in BLOCKED_PLAYER_IDS:
@@ -278,21 +277,15 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         
         report_data = deep_filter(report_data)
         
-        # Pass 4: One more explicit check on transfer recommendations
-        if 'transfer_recommendations' in report_data:
-            top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
-            if top_sug and 'players_out' in top_sug:
-                players_out = top_sug['players_out']
-                final_filtered = [p for p in players_out if p.get('id') not in BLOCKED_PLAYER_IDS]
-                if len(final_filtered) < len(players_out):
-                    logger.error(f"ML Report V2: ❌❌❌ PASS 4 FILTER - Removed {len(players_out) - len(final_filtered)} blocked players! ❌❌❌")
-                    report_data['transfer_recommendations']['top_suggestion']['players_out'] = final_filtered
-                    report_data['transfer_recommendations']['top_suggestion']['num_transfers'] = len(final_filtered)
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:complete", f"V2 GENERATOR COMPLETED", {}, "H2")
+        # #endregion
         
-        logger.info(f"ML Report V2: ✅ Report generated successfully")
         return report_data
         
     except Exception as e:
-        logger.error(f"ML Report V2: Error generating report: {e}", exc_info=True)
+        import traceback
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:error", f"V2 GENERATOR ERROR", {"error": str(e), "traceback": traceback.format_exc()}, "H2")
+        # #endregion
         return {"error": str(e)}
-
