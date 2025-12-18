@@ -16,6 +16,7 @@ BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
 def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
     """Direct FPL API call to get picks - no caching, no wrapper"""
     url = f"https://fantasy.premierleague.com/api/entry/{entry_id}/event/{gameweek}/picks/"
+    logger.info(f"ML Report V2: [FPL API] Fetching picks from: {url}")
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -23,23 +24,29 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
             picks = data.get('picks', [])
             player_ids = [p['element'] for p in picks]
             
+            logger.info(f"ML Report V2: [FPL API] Raw response - {len(player_ids)} picks")
+            logger.info(f"ML Report V2: [FPL API] Player IDs: {sorted(player_ids)}")
+            
             # IMMEDIATELY filter blocked players
+            blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
             filtered_ids = [pid for pid in player_ids if pid not in BLOCKED_PLAYER_IDS]
             
             if len(filtered_ids) < len(player_ids):
-                blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
-                logger.error(f"ML Report V2: FPL API returned blocked players {blocked_found} for GW{gameweek}!")
-                logger.error(f"ML Report V2: Original IDs: {sorted(player_ids)}")
-                logger.error(f"ML Report V2: Filtered IDs: {sorted(filtered_ids)}")
+                logger.error(f"ML Report V2: [FPL API] ❌❌❌ BLOCKED PLAYERS FOUND: {blocked_found} ❌❌❌")
+                logger.error(f"ML Report V2: [FPL API] Original IDs: {sorted(player_ids)}")
+                logger.error(f"ML Report V2: [FPL API] Filtered IDs: {sorted(filtered_ids)}")
+            else:
+                logger.info(f"ML Report V2: [FPL API] ✅ No blocked players in FPL API response")
             
             # Return filtered picks
             filtered_picks = [p for p in picks if p['element'] in filtered_ids]
+            logger.info(f"ML Report V2: [FPL API] Returning {len(filtered_picks)} filtered picks")
             return filtered_picks
         else:
-            logger.error(f"ML Report V2: FPL API error {response.status_code}")
+            logger.error(f"ML Report V2: [FPL API] Error {response.status_code}")
             return []
     except Exception as e:
-        logger.error(f"ML Report V2: Error fetching picks: {e}")
+        logger.error(f"ML Report V2: [FPL API] Exception: {e}", exc_info=True)
         return []
 
 def determine_gameweek(entry_id: int) -> int:
@@ -214,11 +221,29 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         )
         
         # Generate report data
+        logger.info(f"ML Report V2: [STEP 6] Generating report data...")
+        logger.info(f"ML Report V2: [STEP 6] Passing {len(filtered_recommendations)} filtered recommendations to report generator")
+        if filtered_recommendations:
+            top_rec = filtered_recommendations[0]
+            logger.info(f"ML Report V2: [STEP 6] Top recommendation players_out IDs: {[p.get('id') for p in top_rec.get('players_out', [])]}")
+        
         report_gen = ReportGenerator(config)
         report_data = report_gen.generate_report_data(
             entry_info, gameweek, current_squad, filtered_recommendations,
             chip_evals, players_df, None, team_map, bootstrap
         )
+        
+        logger.info(f"ML Report V2: [STEP 6] Report generator returned data")
+        if 'transfer_recommendations' in report_data:
+            top_sug = report_data['transfer_recommendations'].get('top_suggestion', {})
+            if top_sug and 'players_out' in top_sug:
+                players_out_ids_after_report = [p.get('id') for p in top_sug['players_out']]
+                logger.info(f"ML Report V2: [STEP 6] Report data players_out IDs: {players_out_ids_after_report}")
+                blocked_after_report = set(players_out_ids_after_report).intersection(BLOCKED_PLAYER_IDS)
+                if blocked_after_report:
+                    logger.error(f"ML Report V2: [STEP 6] ❌❌❌ REPORT GENERATOR ADDED BLOCKED PLAYERS BACK: {blocked_after_report} ❌❌❌")
+                else:
+                    logger.info(f"ML Report V2: [STEP 6] ✅ Report data is clean after report generator")
         
         # FINAL FILTER: Remove blocked players from report_data - MULTIPLE PASSES
         # Pass 1: Transfer recommendations
