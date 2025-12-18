@@ -92,25 +92,29 @@ export interface MLReport {
     top_suggestion: {
       num_transfers: number;
       net_ev_gain: number;
+      penalty_hits?: number;
+      hit_reason?: string | null;
       players_out: Array<{
         id: number | null;
         name: string;
         team: string;
+        element_type: number;
         form: number | null;
         ev: number;
         ownership: number | null;
         points_per_game: number | null;
-        fixture_difficulty: number | null;
+        fdr: number | null;
       }>;
       players_in: Array<{
         id: number | null;
         name: string;
         team: string;
+        element_type: number;
         form: number | null;
         ev: number;
         ownership: number | null;
         points_per_game: number | null;
-        fixture_difficulty: number | null;
+        fdr: number | null;
       }>;
     } | null;
   };

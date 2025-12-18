@@ -642,7 +642,9 @@ class ReportGenerator:
                 "num_transfers": to_python_type(len(out_players)),  # Use filtered count
                 "net_ev_gain": to_python_type(rec.get('net_ev_gain', 0)),
                 "players_out": out_players,
-                "players_in": in_players
+                "players_in": in_players,
+                "penalty_hits": to_python_type(rec.get('penalty_hits', 0)),
+                "hit_reason": rec.get('hit_reason')  # Reason for taking a hit transfer
             }
         
         # Updated Squad After Transfers

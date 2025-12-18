@@ -25,6 +25,21 @@ const Recommendations: React.FC = () => {
         // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
         const data = await mlApi.getMLReport(entryId, undefined, false);
         console.log('ML Report: Received data:', data);
+        // Debug: Log transfer recommendations data
+        if (data?.transfer_recommendations?.top_suggestion) {
+          const topSug = data.transfer_recommendations.top_suggestion;
+          console.log('ML Report: Top suggestion players_out:', topSug.players_out);
+          console.log('ML Report: Top suggestion players_in:', topSug.players_in);
+          if (topSug.players_out && topSug.players_out.length > 0) {
+            console.log('ML Report: First player OUT:', {
+              name: topSug.players_out[0].name,
+              element_type: topSug.players_out[0].element_type,
+              fdr: topSug.players_out[0].fdr,
+              fixture_difficulty: topSug.players_out[0].fixture_difficulty,
+              allFields: topSug.players_out[0]
+            });
+          }
+        }
         setReport(data);
         setError(null);
         
@@ -157,7 +172,18 @@ const Recommendations: React.FC = () => {
               <div className="bg-retro-background p-4 border-2 border-retro-primary">
                 <p className="text-sm mb-2">
                   <strong>Top Suggestion:</strong> {report.transfer_recommendations.top_suggestion.num_transfers} transfer(s) with a net <Tooltip text="Expected Value: The predicted point gain from making this transfer">EV</Tooltip> gain of <strong>{report.transfer_recommendations.top_suggestion.net_ev_gain.toFixed(2)}</strong>.
+                  {report.transfer_recommendations.top_suggestion.penalty_hits && report.transfer_recommendations.top_suggestion.penalty_hits > 0 && (
+                    <span className="ml-2 text-retro-error font-bold">
+                      (-{report.transfer_recommendations.top_suggestion.penalty_hits * 4} point hit)
+                    </span>
+                  )}
                 </p>
+                {report.transfer_recommendations.top_suggestion.hit_reason && (
+                  <div className="mt-2 p-3 bg-yellow-50 border-2 border-yellow-300 rounded">
+                    <p className="text-sm font-bold text-yellow-800 mb-1">⚠️ Hit Transfer Reason:</p>
+                    <p className="text-xs text-yellow-700">{report.transfer_recommendations.top_suggestion.hit_reason}</p>
+                  </div>
+                )}
                 <div className="mt-2 space-y-1 text-sm">
                   <p>
                     <strong>Out:</strong> {report.transfer_recommendations.top_suggestion.players_out.map(p => `${p.name} (${p.team})`).join(', ')}
@@ -215,15 +241,26 @@ const Recommendations: React.FC = () => {
                             className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
                             onError={(e) => {
                               const img = e.target as HTMLImageElement;
+                              console.warn('[Recommendations] Image load error for player OUT:', {
+                                playerId: playerOut.id,
+                                playerName: playerOut.name,
+                                failedUrl: img.src,
+                                playerData: playerOut
+                              });
                               if (playerOut.id) {
-                                img.src = imagesApi.getPlayerImageUrlFPL(playerOut.id);
+                                const fallbackUrl = imagesApi.getPlayerImageUrlFPL(playerOut.id);
+                                console.log('[Recommendations] Trying FPL fallback URL:', fallbackUrl);
+                                img.src = fallbackUrl;
                               }
+                            }}
+                            onLoad={() => {
+                              console.log('[Recommendations] Image loaded successfully for player OUT:', playerOut.id, playerOut.name);
                             }}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="mb-2">
                               <h3 className="font-bold text-base">{playerOut.name}</h3>
-                              <p className="text-xs opacity-80">{playerOut.team}</p>
+                              <p className="text-xs opacity-80">{playerOut.team} • {positionNames[playerOut.element_type] || '?'}</p>
                               <p className="text-xs font-bold bg-red-100 text-red-700 border border-red-300 px-2 py-0.5 mt-0.5 inline-block">OUT</p>
                             </div>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
@@ -253,7 +290,7 @@ const Recommendations: React.FC = () => {
                                 <Tooltip text="Fixture Difficulty Rating: Difficulty of upcoming fixtures (1-5, lower is easier)">
                                   <span className="opacity-70">FDR:</span>
                                 </Tooltip>
-                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.fixture_difficulty, 'fdr')}</span>
+                                <span className="ml-1 font-mono font-bold">{formatStat(playerOut.fdr ?? (playerOut as any).fixture_difficulty, 'fdr')}</span>
                               </div>
                             </div>
                           </div>
@@ -267,15 +304,26 @@ const Recommendations: React.FC = () => {
                             className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
                             onError={(e) => {
                               const img = e.target as HTMLImageElement;
+                              console.warn('[Recommendations] Image load error for player IN:', {
+                                playerId: playerIn.id,
+                                playerName: playerIn.name,
+                                failedUrl: img.src,
+                                playerData: playerIn
+                              });
                               if (playerIn.id) {
-                                img.src = imagesApi.getPlayerImageUrlFPL(playerIn.id);
+                                const fallbackUrl = imagesApi.getPlayerImageUrlFPL(playerIn.id);
+                                console.log('[Recommendations] Trying FPL fallback URL:', fallbackUrl);
+                                img.src = fallbackUrl;
                               }
+                            }}
+                            onLoad={() => {
+                              console.log('[Recommendations] Image loaded successfully for player IN:', playerIn.id, playerIn.name);
                             }}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="mb-2">
                               <h3 className="font-bold text-base">{playerIn.name}</h3>
-                              <p className="text-xs opacity-80">{playerIn.team}</p>
+                              <p className="text-xs opacity-80">{playerIn.team} • {positionNames[playerIn.element_type] || '?'}</p>
                               <p className="text-xs font-bold bg-green-100 text-green-700 border border-green-300 px-2 py-0.5 mt-0.5 inline-block">IN</p>
                             </div>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
@@ -326,8 +374,8 @@ const Recommendations: React.FC = () => {
                                   <span className="opacity-70">FDR:</span>
                                 </Tooltip>
                                 <span className="ml-1 font-mono font-bold">
-                                  {formatStat(playerIn.fixture_difficulty, 'fdr')}
-                                  {isBetter(playerOut.fixture_difficulty, playerIn.fixture_difficulty, false) && (
+                                  {formatStat(playerIn.fdr ?? (playerIn as any).fixture_difficulty, 'fdr')}
+                                  {isBetter(playerOut.fdr ?? (playerOut as any).fixture_difficulty, playerIn.fdr ?? (playerIn as any).fixture_difficulty, false) && (
                                     <span className="ml-1 text-green-600">↑</span>
                                   )}
                                 </span>

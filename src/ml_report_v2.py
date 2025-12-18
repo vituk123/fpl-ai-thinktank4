@@ -241,7 +241,30 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         if entry_response.status_code == 200:
             entry_info = entry_response.json()
             bank = entry_info.get('last_deadline_bank', 0) / 10.0
-            free_transfers = 1
+            
+            # SPECIAL CASE: Before GW15, all FPL accounts were given 5 free transfers
+            # For GW15 and later, check if we're in that period
+            if gameweek >= 15:
+                # GW15+ - everyone got 5 free transfers before GW15 deadline
+                free_transfers = 5
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Using GW15+ free transfers", {"free_transfers": free_transfers, "gameweek": gameweek}, "H2")
+            else:
+                # Before GW15 - normal free transfer logic
+                # Try to get from entry history
+                try:
+                    history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
+                    if history_response.status_code == 200:
+                        history = history_response.json()
+                        current_event = next((e for e in history.get('current', []) if e.get('event') == gameweek - 1), None)
+                        if current_event:
+                            free_transfers = current_event.get('event_transfers', 0) + 1
+                            free_transfers = min(free_transfers, 2)  # Cap at 2 for normal weeks
+                        else:
+                            free_transfers = 1
+                    else:
+                        free_transfers = 1
+                except:
+                    free_transfers = 1
         else:
             entry_info = {}
             bank = 0.0

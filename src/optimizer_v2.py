@@ -489,13 +489,18 @@ class TransferOptimizerV2:
                     current_squad, available_players, bank, free_transfers, num_forced, forced_out_ids=forced_ids
                 )
                 if sol.get('status') == 'optimal':
+                    penalty_hits = max(0, num_forced-free_transfers)
+                    hit_reason = None
+                    if penalty_hits > 0:
+                        hit_reason = f"Taking a -{penalty_hits * 4} point hit to fix {num_forced} injured/unavailable player(s). The expected value gain ({sol.get('net_ev_gain', 0):.2f} points) outweighs the penalty cost."
                     sol.update({
                         'strategy': 'FIX_FORCED',
                         'description': f'Fix {num_forced} injured player(s)',
                         'priority': 'HIGH',
-                        'penalty_hits': max(0, num_forced-free_transfers),
+                        'penalty_hits': penalty_hits,
                         'transfer_penalty': max(0, num_forced-free_transfers)*4,
-                        'original_net_gain': sol['net_ev_gain']
+                        'original_net_gain': sol['net_ev_gain'],
+                        'hit_reason': hit_reason
                     })
                     recommendations.append(sol)
             except ValueError as e:
@@ -510,13 +515,19 @@ class TransferOptimizerV2:
                     current_squad, available_players, bank, free_transfers, tx
                 )
                 if sol.get('status') == 'optimal' and sol.get('net_ev_gain_adjusted', -999) >= 0.1:
+                    penalty_hits = max(0, tx-free_transfers)
+                    hit_reason = None
+                    if penalty_hits > 0:
+                        net_gain = sol.get('net_ev_gain', 0)
+                        hit_reason = f"Taking a -{penalty_hits * 4} point hit for {tx} transfer(s). The expected value gain ({net_gain:.2f} points) exceeds the penalty cost ({penalty_hits * 4} points), resulting in a net gain of {sol.get('net_ev_gain_adjusted', 0):.2f} points."
                     sol.update({
                         'strategy': 'OPTIMIZE',
                         'description': f'Optimize squad ({tx} transfer{"s" if tx > 1 else ""})',
                         'priority': 'LOW',
-                        'penalty_hits': max(0, tx-free_transfers),
+                        'penalty_hits': penalty_hits,
                         'transfer_penalty': max(0, tx-free_transfers)*4,
-                        'original_net_gain': sol['net_ev_gain']
+                        'original_net_gain': sol['net_ev_gain'],
+                        'hit_reason': hit_reason
                     })
                     recommendations.append(sol)
             except ValueError as e:
