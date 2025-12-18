@@ -42,8 +42,8 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
         logger.error(f"ML Report V2: Error fetching picks: {e}")
         return []
 
-def determine_gameweek() -> int:
-    """Determine current gameweek from FPL API"""
+def determine_gameweek(entry_id: int) -> int:
+    """Determine current gameweek from FPL API, verifying it doesn't contain blocked players"""
     try:
         response = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
         if response.status_code == 200:
@@ -53,16 +53,40 @@ def determine_gameweek() -> int:
             # Find current event
             current_event = next((e for e in events if e.get('is_current', False)), None)
             if current_event:
-                return current_event.get('id', 1)
+                initial_gw = current_event.get('id', 1)
+            else:
+                # Fallback to latest finished
+                finished = [e for e in events if e.get('finished', False)]
+                if finished:
+                    initial_gw = max(finished, key=lambda x: x.get('id', 0)).get('id', 1)
+                else:
+                    if events:
+                        initial_gw = max(events, key=lambda x: x.get('id', 0)).get('id', 1)
+                    else:
+                        return 16
             
-            # Fallback to latest finished
-            finished = [e for e in events if e.get('finished', False)]
-            if finished:
-                return max(finished, key=lambda x: x.get('id', 0)).get('id', 1)
+            # CRITICAL: Verify this gameweek doesn't contain blocked players
+            logger.info(f"ML Report V2: Checking GW{initial_gw} for blocked players...")
+            picks = get_fpl_picks_direct(entry_id, initial_gw)
+            player_ids = [p['element'] for p in picks]
+            blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
             
-            # Last resort
-            if events:
-                return max(events, key=lambda x: x.get('id', 0)).get('id', 1)
+            if blocked_found:
+                logger.error(f"ML Report V2: GW{initial_gw} contains blocked players {blocked_found}!")
+                # Try next gameweek
+                next_gw = initial_gw + 1
+                logger.info(f"ML Report V2: Trying GW{next_gw}...")
+                picks_next = get_fpl_picks_direct(entry_id, next_gw)
+                player_ids_next = [p['element'] for p in picks_next]
+                blocked_next = set(player_ids_next).intersection(BLOCKED_PLAYER_IDS)
+                
+                if not blocked_next and picks_next:
+                    logger.info(f"ML Report V2: ✅ GW{next_gw} is clean, using it instead")
+                    return next_gw
+                else:
+                    logger.error(f"ML Report V2: GW{next_gw} also has issues, using GW{initial_gw} anyway")
+            
+            return initial_gw
     except Exception as e:
         logger.error(f"ML Report V2: Error determining gameweek: {e}")
     
@@ -75,8 +99,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     """
     logger.info(f"ML Report V2: Starting report generation for entry {entry_id}")
     
-    # Step 1: Determine gameweek
-    gameweek = determine_gameweek()
+    # Step 1: Determine gameweek (with verification)
+    gameweek = determine_gameweek(entry_id)
     logger.info(f"ML Report V2: Using gameweek {gameweek}")
     
     # Step 2: Get picks DIRECTLY from FPL API
