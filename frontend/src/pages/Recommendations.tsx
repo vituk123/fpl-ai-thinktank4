@@ -196,8 +196,11 @@ const Recommendations: React.FC = () => {
             )}
           </div>
 
-          {/* Hit vs No-Hit Comparison */}
-          {report.transfer_recommendations.hit_vs_no_hit_comparison && (
+          {/* Hit vs No-Hit Comparison - Only show when hit transfer is recommended */}
+          {report.transfer_recommendations.hit_vs_no_hit_comparison && 
+           report.transfer_recommendations.top_suggestion && 
+           report.transfer_recommendations.top_suggestion.penalty_hits && 
+           report.transfer_recommendations.top_suggestion.penalty_hits > 0 && (
             <div>
               <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Hit vs No-Hit Comparison</h2>
               <div className={`p-4 border-2 rounded ${
