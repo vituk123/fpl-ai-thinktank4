@@ -613,12 +613,22 @@ class ReportGenerator:
                     "fixture_difficulty": fixture_difficulty
                 }
             
-            # Build enhanced player lists with stats
-            out_players = [get_player_stats(p) for p in rec.get('players_out', [])]
-            in_players = [get_player_stats(p) for p in rec.get('players_in', [])]
+            # CRITICAL: Filter out blocked players before building enhanced lists
+            BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
+            filtered_players_out = [p for p in rec.get('players_out', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
+            filtered_players_in = [p for p in rec.get('players_in', []) if p.get('id') not in BLOCKED_PLAYER_IDS]
+            
+            if len(filtered_players_out) < len(rec.get('players_out', [])):
+                logger.warning(f"ReportGenerator: Filtered out {len(rec.get('players_out', [])) - len(filtered_players_out)} blocked players from players_out")
+            if len(filtered_players_in) < len(rec.get('players_in', [])):
+                logger.warning(f"ReportGenerator: Filtered out {len(rec.get('players_in', [])) - len(filtered_players_in)} blocked players from players_in")
+            
+            # Build enhanced player lists with stats (only for non-blocked players)
+            out_players = [get_player_stats(p) for p in filtered_players_out]
+            in_players = [get_player_stats(p) for p in filtered_players_in]
             
             transfer_recommendations["top_suggestion"] = {
-                "num_transfers": to_python_type(rec.get('num_transfers', 0)),
+                "num_transfers": to_python_type(len(out_players)),  # Use filtered count
                 "net_ev_gain": to_python_type(rec.get('net_ev_gain', 0)),
                 "players_out": out_players,
                 "players_in": in_players
