@@ -159,6 +159,13 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     team_map = {t['id']: t['name'] for t in teams_df.to_dict('records')}
     players_df['team_name'] = players_df['team'].map(team_map)
     
+    # Add EV column (expected value) from ep_next or estimate from form
+    if 'ep_next' in players_df.columns:
+        players_df['EV'] = pd.to_numeric(players_df['ep_next'], errors='coerce').fillna(0)
+    else:
+        # Fallback: use form as proxy for EV
+        players_df['EV'] = pd.to_numeric(players_df.get('form', 0), errors='coerce').fillna(0)
+    
     # Filter to only players in picks
     current_squad = players_df[players_df['id'].isin(player_ids)].copy()
     
