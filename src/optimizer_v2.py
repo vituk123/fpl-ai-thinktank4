@@ -33,18 +33,32 @@ class TransferOptimizerV2:
         Get current squad for the specified gameweek.
         
         CRITICAL: This function MUST return a squad without blocked players.
-        If blocked players are found, they are removed immediately.
+        Uses direct FPL API call to bypass any caching issues.
         
         Returns:
             pd.DataFrame: Squad DataFrame with blocked players removed
         """
         logger.info(f"OptimizerV2: [get_current_squad] Entry {entry_id}, Gameweek {gameweek}")
         
-        # Clear cache to ensure fresh data
-        api_client.clear_cache()
+        # CRITICAL: Use direct HTTP request to bypass any caching
+        import requests
+        url = f"https://fantasy.premierleague.com/api/entry/{entry_id}/event/{gameweek}/picks/"
+        logger.info(f"OptimizerV2: [get_current_squad] Making DIRECT FPL API call: {url}")
         
-        # Fetch picks for the specified gameweek
-        picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                picks_data = response.json()
+                logger.info(f"OptimizerV2: [get_current_squad] Direct API call successful")
+            else:
+                logger.warning(f"OptimizerV2: [get_current_squad] Direct API call failed: {response.status_code}")
+                # Fallback to api_client
+                api_client.clear_cache()
+                picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
+        except Exception as e:
+            logger.warning(f"OptimizerV2: [get_current_squad] Direct API call error: {e}, using api_client")
+            api_client.clear_cache()
+            picks_data = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
         
         if not picks_data or 'picks' not in picks_data:
             logger.warning(f"OptimizerV2: [get_current_squad] No picks data for entry {entry_id}, gameweek {gameweek}")
@@ -52,7 +66,7 @@ class TransferOptimizerV2:
         
         # Extract player IDs from picks
         player_ids = [p['element'] for p in picks_data['picks']]
-        logger.info(f"OptimizerV2: [get_current_squad] Raw picks - Player IDs: {sorted(player_ids)}")
+        logger.info(f"OptimizerV2: [get_current_squad] Raw picks from FPL API - Player IDs: {sorted(player_ids)}")
         
         # CRITICAL: Remove blocked players immediately
         original_count = len(player_ids)
@@ -60,9 +74,11 @@ class TransferOptimizerV2:
         removed_count = original_count - len(player_ids)
         
         if removed_count > 0:
-            logger.error(f"OptimizerV2: [get_current_squad] CRITICAL - Removed {removed_count} blocked players from picks!")
+            logger.error(f"OptimizerV2: [get_current_squad] ❌❌❌ CRITICAL - FPL API RETURNED {removed_count} BLOCKED PLAYERS! ❌❌❌")
             logger.error(f"OptimizerV2: [get_current_squad] Original IDs: {sorted([p['element'] for p in picks_data['picks']])}")
             logger.error(f"OptimizerV2: [get_current_squad] Filtered IDs: {sorted(player_ids)}")
+        else:
+            logger.info(f"OptimizerV2: [get_current_squad] ✅ FPL API returned clean picks (no blocked players)")
         
         # Create squad DataFrame
         if not player_ids:
@@ -76,7 +92,7 @@ class TransferOptimizerV2:
         blocked_found = squad_ids.intersection(BLOCKED_PLAYER_IDS)
         
         if blocked_found:
-            logger.error(f"OptimizerV2: [get_current_squad] CRITICAL - Blocked players {blocked_found} found in squad_df!")
+            logger.error(f"OptimizerV2: [get_current_squad] ❌❌❌ CRITICAL - Blocked players {blocked_found} found in squad_df! ❌❌❌")
             squad_df = squad_df[~squad_df['id'].isin(BLOCKED_PLAYER_IDS)].copy()
             logger.error(f"OptimizerV2: [get_current_squad] Force-removed from DataFrame. New size: {len(squad_df)}")
         
