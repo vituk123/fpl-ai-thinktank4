@@ -56,17 +56,78 @@ class TransferOptimizer:
         """
         Get current squad for the specified gameweek.
         
-        CRITICAL FIX: Always exclude GW15 players (Gabriel=5, Caicedo=241) as they were
-        removed before GW16 started and should NEVER appear in recommendations.
-        
-        Logic:
-        1. If gameweek is in session (is_current=True), use that gameweek's picks
-        2. If gameweek is finished, use that gameweek's picks (most recent completed squad)
-        3. If gameweek hasn't started yet (is_next=True), find the most recent finished gameweek
-        4. Only fall back to gameweek-1 if none of the above work
+        CRITICAL: Aggressively tries multiple gameweeks to find the correct squad
+        without blocked players.
         """
-        # CRITICAL: Problem player IDs that should NEVER be in current squad for GW16+
-        PROBLEM_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
+        # Clear all caches
+        api_client.clear_cache()
+        bootstrap = api_client.get_bootstrap_static(use_cache=False)
+        events = bootstrap.get('events', [])
+        
+        # Try multiple gameweeks in priority order
+        gameweeks_to_try = []
+        
+        # Priority 1: Current gameweek
+        gameweeks_to_try.append(gameweek)
+        
+        # Priority 2: Next gameweek (if current is finished)
+        target_event = next((e for e in events if e.get('id') == gameweek), None)
+        if target_event and target_event.get('finished', False):
+            gameweeks_to_try.append(gameweek + 1)
+        
+        # Priority 3: Most recent finished gameweek
+        finished_events = [e for e in events if e.get('finished', False)]
+        if finished_events:
+            most_recent = max(finished_events, key=lambda x: x.get('id', 0))
+            if most_recent['id'] not in gameweeks_to_try:
+                gameweeks_to_try.append(most_recent['id'])
+        
+        # Priority 4: Previous gameweek (but NOT for GW16+ to avoid GW15)
+        if gameweek >= 16:
+            # For GW16+, skip gameweek-1 to avoid GW15 with blocked players
+            logger.info(f"GW{gameweek} >= 16, skipping GW{gameweek-1} to avoid blocked players")
+        elif gameweek - 1 not in gameweeks_to_try and gameweek > 1:
+            gameweeks_to_try.append(gameweek - 1)
+        
+        logger.info(f"Will try gameweeks in order: {gameweeks_to_try}")
+        
+        # Try each gameweek until we find one without blocked players
+        for try_gw in gameweeks_to_try:
+            logger.info(f"Attempting to fetch squad from GW{try_gw}...")
+            
+            try:
+                picks_data = api_client.get_entry_picks(entry_id, try_gw, use_cache=False)
+                
+                if not picks_data or 'picks' not in picks_data:
+                    logger.warning(f"No picks data for GW{try_gw}")
+                    continue
+                
+                player_ids = [p['element'] for p in picks_data['picks']]
+                blocked_found = set(player_ids).intersection(BLOCKED_PLAYER_IDS)
+                
+                if blocked_found:
+                    logger.warning(f"GW{try_gw} contains blocked players {blocked_found}, trying next gameweek...")
+                    continue
+                
+                # Success - found clean squad
+                squad_df = players_df[players_df['id'].isin(player_ids)].copy()
+                
+                if not squad_df.empty:
+                    logger.info(f"✓ SUCCESS: Found clean squad from GW{try_gw} with {len(squad_df)} players")
+                    logger.info(f"  Player IDs: {sorted(player_ids)[:10]}...")
+                    return squad_df
+                else:
+                    logger.warning(f"Squad DataFrame is empty for GW{try_gw}")
+                    continue
+                    
+            except Exception as e:
+                logger.warning(f"Error fetching GW{try_gw}: {e}")
+                continue
+        
+        # If we get here, all gameweeks failed - return empty and log error
+        logger.error(f"CRITICAL: Could not find valid squad for entry {entry_id} in any gameweek!")
+        logger.error(f"Tried gameweeks: {gameweeks_to_try}")
+        return pd.DataFrame()
         
         # CRITICAL: Don't cache bootstrap when checking gameweek status
         # Cached data may have stale event flags (is_current, finished, is_next)
