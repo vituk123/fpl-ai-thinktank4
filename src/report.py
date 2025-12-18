@@ -528,11 +528,12 @@ class ReportGenerator:
                         "id": None,
                         "name": str(to_python_type(player_dict.get('name', ''))),
                         "team": str(to_python_type(player_dict.get('team', 'Unknown'))),
+                        "element_type": to_python_type(player_dict.get('element_type', 0)),
                         "form": None,
                         "ev": to_python_type(player_dict.get('EV', 0)),
                         "ownership": None,
                         "points_per_game": None,
-                        "fixture_difficulty": None
+                        "fdr": to_python_type(player_dict.get('fdr', 3.0))
                     }
                 
                 # Look up player in players_df
@@ -543,11 +544,12 @@ class ReportGenerator:
                         "id": to_python_type(player_id),
                         "name": str(to_python_type(player_dict.get('name', ''))),
                         "team": str(to_python_type(player_dict.get('team', 'Unknown'))),
+                        "element_type": to_python_type(player_dict.get('element_type', 0)),
                         "form": None,
                         "ev": to_python_type(player_dict.get('EV', 0)),
                         "ownership": None,
                         "points_per_game": None,
-                        "fixture_difficulty": None
+                        "fdr": to_python_type(player_dict.get('fdr', 3.0))
                     }
                 
                 row = player_row.iloc[0]
@@ -587,30 +589,39 @@ class ReportGenerator:
                     except:
                         points_per_game = None
                 
-                # Get fixture difficulty (prefer fdr_3gw, fallback to fdr_next or fixture_difficulty)
-                fixture_difficulty = None
-                for fdr_col in ['fdr_3gw', 'fdr_next', 'fixture_difficulty', 'fdr_custom']:
+                # Get fixture difficulty (prefer fdr, fdr_3gw, fallback to fdr_next or fixture_difficulty)
+                fdr = None
+                for fdr_col in ['fdr', 'fdr_3gw', 'fdr_next', 'fixture_difficulty', 'fdr_custom']:
                     if fdr_col in row and not pd.isna(row[fdr_col]):
                         try:
-                            fixture_difficulty = float(to_python_type(row[fdr_col]))
+                            fdr = float(to_python_type(row[fdr_col]))
                             break
                         except:
                             continue
+                # Also check player_dict for fdr (from optimizer)
+                if fdr is None and 'fdr' in player_dict:
+                    fdr = to_python_type(player_dict.get('fdr', 3.0))
+                if fdr is None:
+                    fdr = 3.0  # Default FDR
                 
                 # Get EV (from recommendation or players_df)
                 ev = to_python_type(player_dict.get('EV', row.get('EV', 0)))
                 if pd.isna(ev):
                     ev = 0
                 
+                # Get element_type (position)
+                element_type = to_python_type(row.get('element_type', player_dict.get('element_type', 0)))
+                
                 return {
                     "id": to_python_type(player_id),
                     "name": str(to_python_type(row.get('web_name', player_dict.get('name', '')))),
                     "team": str(to_python_type(row.get('team_name', player_dict.get('team', 'Unknown')))),
+                    "element_type": element_type,
                     "form": form,
                     "ev": ev,
                     "ownership": ownership,
                     "points_per_game": points_per_game,
-                    "fixture_difficulty": fixture_difficulty
+                    "fdr": fdr
                 }
             
             # CRITICAL: Filter out blocked players before building enhanced lists
