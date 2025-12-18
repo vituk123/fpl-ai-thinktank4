@@ -1446,8 +1446,33 @@ async def get_ml_report(
             # Get current squad using the determined gameweek (gameweek is already determined by determine_clean_gameweek)
             # USING REWRITTEN OPTIMIZER V2
             try:
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] ========== STARTING SQUAD RETRIEVAL ==========")
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Entry ID: {entry_id}, Determined Gameweek: {gameweek}")
+                
                 optimizer = TransferOptimizerV2(config)
-                logger.info(f"ML Report: [SQUAD RETRIEVAL] Using OptimizerV2 - Getting current squad for entry {entry_id}, gameweek {gameweek}")
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] Using OptimizerV2 - Getting current squad...")
+                
+                # CRITICAL: Verify FPL API directly before calling optimizer
+                logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Directly checking FPL API for GW{gameweek} picks...")
+                api_client.clear_cache()
+                direct_picks = api_client.get_entry_picks(entry_id, gameweek, use_cache=False)
+                
+                if direct_picks and 'picks' in direct_picks:
+                    direct_player_ids = [p['element'] for p in direct_picks['picks']]
+                    logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] FPL API returned {len(direct_player_ids)} picks for GW{gameweek}")
+                    logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Player IDs from FPL API: {sorted(direct_player_ids)}")
+                    
+                    blocked_in_api = set(direct_player_ids).intersection({5, 241})
+                    if blocked_in_api:
+                        logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] ❌❌❌ FPL API RETURNED BLOCKED PLAYERS: {blocked_in_api} ❌❌❌")
+                        logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] This means the FPL API itself is returning GW15 data!")
+                        for pid in blocked_in_api:
+                            blocked_pick = next((p for p in direct_picks['picks'] if p['element'] == pid), None)
+                            logger.error(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Blocked pick details: {blocked_pick}")
+                    else:
+                        logger.info(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] ✅ FPL API returned clean picks (no blocked players)")
+                else:
+                    logger.warning(f"ML Report: [SQUAD RETRIEVAL] [FPL API CHECK] Could not get picks from FPL API")
             # #region agent log
             try:
                 with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug.log'), 'a') as f:
@@ -1770,13 +1795,34 @@ async def get_ml_report(
         # Also pass bootstrap to find next upcoming gameweek using is_next flag
         # #region agent log
         # Verify recommendations before passing to report generator
+        logger.info(f"ML Report: [BEFORE REPORT GENERATOR] ========== VERIFYING RECOMMENDATIONS ==========")
         final_recommendations = smart_recs.get('recommendations', [])
         problem_player_ids = {5, 241}  # Gabriel, Caicedo
-        for rec in final_recommendations:
+        
+        logger.info(f"ML Report: [BEFORE REPORT GENERATOR] Total recommendations: {len(final_recommendations)}")
+        
+        for idx, rec in enumerate(final_recommendations):
             players_out_ids = {p.get('id') for p in rec.get('players_out', [])}
-            has_problem = bool(players_out_ids.intersection(problem_player_ids))
-            if has_problem:
-                logger.error(f"ML Report: CRITICAL - Found GW15 players in recommendations BEFORE report generator! Rec players OUT IDs: {list(players_out_ids)}")
+            players_in_ids = {p.get('id') for p in rec.get('players_in', [])}
+            has_problem_out = bool(players_out_ids.intersection(problem_player_ids))
+            has_problem_in = bool(players_in_ids.intersection(problem_player_ids))
+            
+            logger.info(f"ML Report: [BEFORE REPORT GENERATOR] Recommendation {idx}:")
+            logger.info(f"ML Report: [BEFORE REPORT GENERATOR]   Players OUT IDs: {sorted(players_out_ids)}")
+            logger.info(f"ML Report: [BEFORE REPORT GENERATOR]   Players IN IDs: {sorted(players_in_ids)}")
+            
+            if has_problem_out or has_problem_in:
+                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] ❌❌❌ CRITICAL - Recommendation {idx} contains blocked players! ❌❌❌")
+                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Blocked in OUT: {players_out_ids.intersection(problem_player_ids)}")
+                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Blocked in IN: {players_in_ids.intersection(problem_player_ids)}")
+                
+                # Remove blocked players
+                rec['players_out'] = [p for p in rec.get('players_out', []) if p.get('id') not in problem_player_ids]
+                rec['players_in'] = [p for p in rec.get('players_in', []) if p.get('id') not in problem_player_ids]
+                rec['num_transfers'] = len(rec['players_out'])
+                logger.error(f"ML Report: [BEFORE REPORT GENERATOR] Force-removed blocked players from recommendation {idx}")
+            else:
+                logger.info(f"ML Report: [BEFORE REPORT GENERATOR] ✅ Recommendation {idx} is clean")
         
         logger.info(f"ML Report: Before report generator - current_squad empty: {current_squad.empty}, size: {len(current_squad)}, player IDs: {sorted(current_squad['id'].tolist()) if not current_squad.empty else []}, recommendations count: {len(final_recommendations)}")
         try:
