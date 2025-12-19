@@ -384,12 +384,22 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             current_squad, players_df, gameweek, avail_chips, bank, filtered_recommendations
         )
         
+        # Get fixtures for updated squad display
+        fixtures = []
+        try:
+            fixtures_response = requests.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
+            if fixtures_response.status_code == 200:
+                fixtures = fixtures_response.json()
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step7", f"Fetched fixtures", {"count": len(fixtures)}, "H2")
+        except Exception as e:
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step7", f"Failed to fetch fixtures", {"error": str(e)}, "H2")
+        
         # Generate report data
         report_gen = ReportGenerator(config)
         logger.info(f"ML Report V2: Generating report data with gameweek {gameweek}")
         report_data = report_gen.generate_report_data(
             entry_info, gameweek, current_squad, filtered_recommendations,
-            chip_evals, players_df, None, team_map, bootstrap
+            chip_evals, players_df, fixtures, team_map, bootstrap
         )
         
         # CRITICAL: Verify gameweek in report_data

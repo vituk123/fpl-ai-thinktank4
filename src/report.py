@@ -829,6 +829,74 @@ class ReportGenerator:
                         "xp": to_python_type(row['EV']),
                         "fixture": str(row.get('opponent', 'No fixture'))
                     })
+            
+            # Captain and Vice-Captain recommendations for updated squad
+            captain_recommendation = None
+            vice_captain_recommendation = None
+            
+            if not starting_xi_df.empty:
+                # Ensure fdr and form columns exist (add defaults if missing)
+                if 'fdr' not in starting_xi_df.columns:
+                    starting_xi_df['fdr'] = 3.0
+                if 'form' not in starting_xi_df.columns:
+                    starting_xi_df['form'] = 0.0
+                
+                # Calculate captain score: EV + form bonus + FDR bonus
+                # Elite players (high form) and forwards get priority
+                starting_xi_df['captain_score'] = starting_xi_df.apply(lambda row: (
+                    to_python_type(row.get('EV', 0)) +
+                    (to_python_type(row.get('form', 0)) * 0.3) +  # Form bonus
+                    ((5.0 - to_python_type(row.get('fdr', 3.0))) * 0.5) +  # Lower FDR = easier fixture = bonus
+                    (2.0 if to_python_type(row.get('element_type', 0)) == 4 else 0)  # Forwards get +2 bonus
+                ), axis=1)
+                
+                # Sort by captain score
+                starting_xi_sorted = starting_xi_df.sort_values('captain_score', ascending=False)
+                
+                # Best captain (highest score)
+                if len(starting_xi_sorted) > 0:
+                    best_captain_row = starting_xi_sorted.iloc[0]
+                    captain_recommendation = {
+                        "player": str(best_captain_row['web_name']),
+                        "team": str(best_captain_row['team_name']),
+                        "pos": to_python_type(best_captain_row['element_type']),
+                        "xp": to_python_type(best_captain_row['EV']),
+                        "form": to_python_type(best_captain_row.get('form', 0)),
+                        "fdr": to_python_type(best_captain_row.get('fdr', 3.0)),
+                        "fixture": str(best_captain_row.get('opponent', 'No fixture')),
+                        "reason": f"Highest captain score ({best_captain_row['captain_score']:.2f}) based on EV, form, and fixture difficulty"
+                    }
+                
+                # Best vice-captain (second highest score, or best if captain is unavailable)
+                if len(starting_xi_sorted) > 1:
+                    best_vice_row = starting_xi_sorted.iloc[1]
+                    vice_captain_recommendation = {
+                        "player": str(best_vice_row['web_name']),
+                        "team": str(best_vice_row['team_name']),
+                        "pos": to_python_type(best_vice_row['element_type']),
+                        "xp": to_python_type(best_vice_row['EV']),
+                        "form": to_python_type(best_vice_row.get('form', 0)),
+                        "fdr": to_python_type(best_vice_row.get('fdr', 3.0)),
+                        "fixture": str(best_vice_row.get('opponent', 'No fixture')),
+                        "reason": f"Second highest captain score ({best_vice_row['captain_score']:.2f}) - good backup option"
+                    }
+                elif len(starting_xi_sorted) > 0:
+                    # Only one player, use same as captain
+                    best_vice_row = starting_xi_sorted.iloc[0]
+                    vice_captain_recommendation = {
+                        "player": str(best_vice_row['web_name']),
+                        "team": str(best_vice_row['team_name']),
+                        "pos": to_python_type(best_vice_row['element_type']),
+                        "xp": to_python_type(best_vice_row['EV']),
+                        "form": to_python_type(best_vice_row.get('form', 0)),
+                        "fdr": to_python_type(best_vice_row.get('fdr', 3.0)),
+                        "fixture": str(best_vice_row.get('opponent', 'No fixture')),
+                        "reason": "Only one player in starting XI - same as captain"
+                    }
+            
+            # Add captain/vice recommendations to updated_squad
+            updated_squad["captain"] = captain_recommendation
+            updated_squad["vice_captain"] = vice_captain_recommendation
         
         # Chip Recommendation
         best_chip_raw = chip_evaluation.get('best_chip') or 'NO CHIP'

@@ -160,6 +160,26 @@ export interface MLReport {
       xp: number;
       fixture: string;
     }>;
+    captain?: {
+      player: string;
+      team: string;
+      pos: number;
+      xp: number;
+      form: number;
+      fdr: number;
+      fixture: string;
+      reason: string;
+    } | null;
+    vice_captain?: {
+      player: string;
+      team: string;
+      pos: number;
+      xp: number;
+      form: number;
+      fdr: number;
+      fixture: string;
+      reason: string;
+    } | null;
   };
   chip_recommendation: {
     best_chip: string;

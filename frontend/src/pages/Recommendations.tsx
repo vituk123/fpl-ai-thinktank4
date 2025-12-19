@@ -37,7 +37,6 @@ const Recommendations: React.FC = () => {
               name: topSug.players_out[0].name,
               element_type: topSug.players_out[0].element_type,
               fdr: topSug.players_out[0].fdr,
-              fixture_difficulty: topSug.players_out[0].fixture_difficulty,
               allFields: topSug.players_out[0]
             });
           }
@@ -536,6 +535,69 @@ const Recommendations: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Captain and Vice-Captain Recommendations */}
+              {(report.updated_squad.captain || report.updated_squad.vice_captain) && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-bold uppercase mb-3">Captain & Vice-Captain Recommendations</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {report.updated_squad.captain && (
+                      <div className="bg-retro-background p-4 border-2 border-retro-primary rounded">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-lg font-bold">C</span>
+                          <h4 className="text-sm font-bold uppercase">Captain</h4>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <p className="font-bold text-base">{report.updated_squad.captain.player}</p>
+                          <p className="opacity-80">{report.updated_squad.captain.team} • {positionNames[report.updated_squad.captain.pos] || report.updated_squad.captain.pos}</p>
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                              <span className="opacity-70">xP:</span> <span className="font-bold">{report.updated_squad.captain.xp.toFixed(2)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">Form:</span> <span className="font-bold">{report.updated_squad.captain.form.toFixed(1)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">FDR:</span> <span className="font-bold">{report.updated_squad.captain.fdr.toFixed(1)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">Fixture:</span> <span className="font-bold">{report.updated_squad.captain.fixture}</span>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs opacity-80 italic">{report.updated_squad.captain.reason}</p>
+                        </div>
+                      </div>
+                    )}
+                    {report.updated_squad.vice_captain && (
+                      <div className="bg-retro-background p-4 border-2 border-retro-primary rounded">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-lg font-bold">V</span>
+                          <h4 className="text-sm font-bold uppercase">Vice-Captain</h4>
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <p className="font-bold text-base">{report.updated_squad.vice_captain.player}</p>
+                          <p className="opacity-80">{report.updated_squad.vice_captain.team} • {positionNames[report.updated_squad.vice_captain.pos] || report.updated_squad.vice_captain.pos}</p>
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                              <span className="opacity-70">xP:</span> <span className="font-bold">{report.updated_squad.vice_captain.xp.toFixed(2)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">Form:</span> <span className="font-bold">{report.updated_squad.vice_captain.form.toFixed(1)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">FDR:</span> <span className="font-bold">{report.updated_squad.vice_captain.fdr.toFixed(1)}</span>
+                            </div>
+                            <div>
+                              <span className="opacity-70">Fixture:</span> <span className="font-bold">{report.updated_squad.vice_captain.fixture}</span>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs opacity-80 italic">{report.updated_squad.vice_captain.reason}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -550,7 +612,7 @@ const Recommendations: React.FC = () => {
                 <ul className="list-disc list-inside space-y-1 text-sm mt-2">
                   {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
                     <li key={chipName}>
-                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
+                      <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {(evaluation as { reason: string }).reason}
                     </li>
                   ))}
                 </ul>
