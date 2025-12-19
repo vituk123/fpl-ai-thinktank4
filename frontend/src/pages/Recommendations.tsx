@@ -37,7 +37,6 @@ const Recommendations: React.FC = () => {
               name: topSug.players_out[0].name,
               element_type: topSug.players_out[0].element_type,
               fdr: topSug.players_out[0].fdr,
-              fdr: topSug.players_out[0].fdr,
               allFields: topSug.players_out[0]
             });
           }
