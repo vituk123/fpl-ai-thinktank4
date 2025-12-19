@@ -101,27 +101,41 @@ def determine_gameweek(entry_id: int) -> int:
             events = data.get('events', [])
             
             # Priority 1: Latest finished gameweek (most recent completed)
+            # This ensures we analyze the most recent completed gameweek, not an in-progress one
             finished = [e for e in events if e.get('finished', False)]
             if finished:
                 latest_finished = max(finished, key=lambda x: x.get('id', 0))
                 initial_gw = latest_finished.get('id', 1)
+                logger.info(f"ML Report V2: Determined gameweek {initial_gw} (latest finished)")
                 debug_log("ml_report_v2.py:determine_gameweek", f"Using latest finished gameweek", {"gameweek": initial_gw, "finished": latest_finished.get('finished', False)}, "H1")
             else:
-                # Priority 2: Current event (if no finished events)
+                # Priority 2: Current event (if no finished events - should not happen in normal season)
                 current_event = next((e for e in events if e.get('is_current', False)), None)
                 if current_event:
                     initial_gw = current_event.get('id', 1)
+                    logger.info(f"ML Report V2: Determined gameweek {initial_gw} (current event - no finished events found)")
                     debug_log("ml_report_v2.py:determine_gameweek", f"Using current event", {"gameweek": initial_gw}, "H1")
                 else:
                     # Priority 3: Next event
                     next_event = next((e for e in events if e.get('is_next', False)), None)
                     if next_event:
                         initial_gw = next_event.get('id', 1)
+                        logger.info(f"ML Report V2: Determined gameweek {initial_gw} (next event)")
                         debug_log("ml_report_v2.py:determine_gameweek", f"Using next event", {"gameweek": initial_gw}, "H1")
                     else:
                         # Fallback: max event ID
                         initial_gw = max((e.get('id', 1) for e in events), default=16)
+                        logger.warning(f"ML Report V2: Determined gameweek {initial_gw} (fallback - max event ID)")
                         debug_log("ml_report_v2.py:determine_gameweek", f"Using max event ID", {"gameweek": initial_gw}, "H1")
+            
+            # CRITICAL: Ensure we never return GW15 or earlier if GW16+ exists
+            # This prevents regression to old gameweeks
+            all_event_ids = [e.get('id', 0) for e in events if e.get('id', 0) > 0]
+            if all_event_ids:
+                max_event_id = max(all_event_ids)
+                if initial_gw < max_event_id - 1:  # If determined GW is more than 1 behind max, use max-1
+                    logger.warning(f"ML Report V2: Determined gameweek {initial_gw} is too old (max is {max_event_id}), using {max_event_id - 1}")
+                    initial_gw = max_event_id - 1
             
             return initial_gw
     except Exception as e:
