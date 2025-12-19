@@ -129,6 +129,150 @@ def determine_gameweek(entry_id: int) -> int:
     
     return 16  # Fallback
 
+def generate_captain_recommendations(squad: pd.DataFrame, all_players: pd.DataFrame, gameweek: int, fixtures: List[Dict], team_map: Dict) -> Dict:
+    """Generate captain and vice-captain recommendations based on EV, form, fixtures, and other factors"""
+    try:
+        # Get next gameweek fixtures
+        next_gw = gameweek + 1
+        next_fixtures = [f for f in fixtures if f.get('event') == next_gw] if fixtures else []
+        
+        # Build team FDR map
+        team_fdr_map = {}
+        for fixture in next_fixtures:
+            home_team = fixture.get('team_h')
+            away_team = fixture.get('team_a')
+            home_difficulty = fixture.get('team_h_difficulty', 3)
+            away_difficulty = fixture.get('team_a_difficulty', 3)
+            if home_team:
+                team_fdr_map[home_team] = home_difficulty
+            if away_team:
+                team_fdr_map[away_team] = away_difficulty
+        
+        # Get starting XI (top 11 by EV)
+        squad_sorted = squad.sort_values('EV', ascending=False)
+        starting_xi = squad_sorted.head(11)
+        
+        if starting_xi.empty:
+            return {
+                "captain": None,
+                "vice_captain": None,
+                "reason": "No players available for captaincy"
+            }
+        
+        # Score each player for captaincy
+        candidates = []
+        for _, player in starting_xi.iterrows():
+            player_id = player.get('id')
+            ev = float(player.get('EV', 0))
+            form = float(player.get('form', 0)) if pd.notna(player.get('form')) else 0
+            points_per_game = float(player.get('points_per_game', 0)) if pd.notna(player.get('points_per_game')) else 0
+            total_points = int(player.get('total_points', 0)) if pd.notna(player.get('total_points')) else 0
+            element_type = int(player.get('element_type', 0))
+            team_id = int(player.get('team', 0))
+            
+            # Get FDR for next gameweek
+            fdr = team_fdr_map.get(team_id, 3.0)
+            
+            # Calculate captain score
+            # Base: EV (most important)
+            score = ev
+            
+            # Bonus for form (recent performance)
+            if form > 0:
+                score += form * 0.3
+            
+            # Bonus for proven performance (points per game)
+            if points_per_game > 0:
+                score += min(points_per_game * 0.2, 2.0)  # Cap at 2.0
+            
+            # Bonus for elite players (high total points)
+            if total_points > 100:
+                score += 1.0
+            if total_points > 150:
+                score += 0.5
+            
+            # Bonus for forwards (better captaincy option)
+            if element_type == 4:  # Forward
+                score += 1.5
+            
+            # Bonus for easy fixtures (FDR 1-2)
+            if fdr <= 2:
+                score += (3 - fdr) * 0.5  # +1.0 for FDR 1, +0.5 for FDR 2
+            
+            # Penalty for hard fixtures (FDR 4-5)
+            if fdr >= 4:
+                score -= (fdr - 3) * 0.3
+            
+            candidates.append({
+                'id': player_id,
+                'name': player.get('web_name', 'Unknown'),
+                'team': player.get('team_name', 'Unknown'),
+                'ev': ev,
+                'form': form,
+                'points_per_game': points_per_game,
+                'fdr': fdr,
+                'element_type': element_type,
+                'captain_score': score
+            })
+        
+        # Sort by captain score
+        candidates.sort(key=lambda x: x['captain_score'], reverse=True)
+        
+        if len(candidates) >= 2:
+            captain = candidates[0]
+            vice_captain = candidates[1]
+            
+            return {
+                "captain": {
+                    "id": captain['id'],
+                    "name": captain['name'],
+                    "team": captain['team'],
+                    "ev": round(captain['ev'], 2),
+                    "form": round(captain['form'], 1) if captain['form'] > 0 else None,
+                    "fdr": captain['fdr'],
+                    "captain_score": round(captain['captain_score'], 2),
+                    "reason": f"Highest captain score ({captain['captain_score']:.2f}) based on EV ({captain['ev']:.2f}), form ({captain['form']:.1f}), and fixture difficulty (FDR {captain['fdr']:.0f})"
+                },
+                "vice_captain": {
+                    "id": vice_captain['id'],
+                    "name": vice_captain['name'],
+                    "team": vice_captain['team'],
+                    "ev": round(vice_captain['ev'], 2),
+                    "form": round(vice_captain['form'], 1) if vice_captain['form'] > 0 else None,
+                    "fdr": vice_captain['fdr'],
+                    "captain_score": round(vice_captain['captain_score'], 2),
+                    "reason": f"Second-highest captain score ({vice_captain['captain_score']:.2f}) based on EV ({vice_captain['ev']:.2f}), form ({vice_captain['form']:.1f}), and fixture difficulty (FDR {vice_captain['fdr']:.0f})"
+                }
+            }
+        elif len(candidates) == 1:
+            captain = candidates[0]
+            return {
+                "captain": {
+                    "id": captain['id'],
+                    "name": captain['name'],
+                    "team": captain['team'],
+                    "ev": round(captain['ev'], 2),
+                    "form": round(captain['form'], 1) if captain['form'] > 0 else None,
+                    "fdr": captain['fdr'],
+                    "captain_score": round(captain['captain_score'], 2),
+                    "reason": f"Only suitable captain option with score {captain['captain_score']:.2f}"
+                },
+                "vice_captain": None
+            }
+        else:
+            return {
+                "captain": None,
+                "vice_captain": None,
+                "reason": "No suitable captain found"
+            }
+    except Exception as e:
+        logger.error(f"ML Report V2: Error generating captain recommendations: {e}")
+        return {
+            "captain": None,
+            "vice_captain": None,
+            "reason": f"Error: {str(e)}"
+        }
+
 def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     """
     Generate ML report using a completely new, simplified approach.
@@ -384,13 +528,29 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             current_squad, players_df, gameweek, avail_chips, bank, filtered_recommendations
         )
         
+        # Get fixtures for updated squad display (reuse fixtures already fetched earlier)
+        fixtures = []
+        try:
+            fixtures_response = requests.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
+            if fixtures_response.status_code == 200:
+                fixtures = fixtures_response.json()
+                logger.info(f"ML Report V2: Fetched {len(fixtures)} fixtures for updated squad")
+        except Exception as e:
+            logger.warning(f"ML Report V2: Failed to fetch fixtures: {e}")
+        
+        # Generate captain/vice-captain recommendations
+        captain_recommendations = generate_captain_recommendations(current_squad, players_df, gameweek, fixtures, team_map)
+        
         # Generate report data
         report_gen = ReportGenerator(config)
         logger.info(f"ML Report V2: Generating report data with gameweek {gameweek}")
         report_data = report_gen.generate_report_data(
             entry_info, gameweek, current_squad, filtered_recommendations,
-            chip_evals, players_df, None, team_map, bootstrap
+            chip_evals, players_df, fixtures, team_map, bootstrap
         )
+        
+        # Add captain recommendations to report data
+        report_data['captain_recommendations'] = captain_recommendations
         
         # CRITICAL: Verify gameweek in report_data
         if 'header' in report_data and 'gameweek' in report_data['header']:

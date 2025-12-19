@@ -21,7 +21,7 @@ const AppRoutes = () => {
     const { isAuthenticated } = useAppContext();
 
     return (
-        <div className="min-h-screen pt-[60px] md:pt-10 font-sans text-retro-text relative">
+        <div className="min-h-screen pt-9 md:pt-10 font-sans text-retro-text relative">
           <MacMenuBar />
           
           <div className="relative z-10">

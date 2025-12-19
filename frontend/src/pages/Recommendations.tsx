@@ -539,6 +539,65 @@ const Recommendations: React.FC = () => {
             </div>
           )}
 
+          {/* Captain & Vice-Captain Recommendations */}
+          {report.captain_recommendations && (report.captain_recommendations.captain || report.captain_recommendations.vice_captain) && (
+            <div>
+              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Captain & Vice-Captain Recommendations</h2>
+              <div className="space-y-4">
+                {report.captain_recommendations.captain && (
+                  <div className="bg-retro-background p-4 border-2 border-retro-primary">
+                    <h3 className="text-sm font-bold uppercase mb-2">Captain (C)</h3>
+                    <div className="space-y-1 text-sm">
+                      <p><strong>{report.captain_recommendations.captain.name}</strong> ({report.captain_recommendations.captain.team})</p>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <span className="text-xs text-gray-600">EV:</span> <strong>{report.captain_recommendations.captain.ev.toFixed(2)}</strong>
+                        </div>
+                        {report.captain_recommendations.captain.form && (
+                          <div>
+                            <span className="text-xs text-gray-600">Form:</span> <strong>{report.captain_recommendations.captain.form.toFixed(1)}</strong>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs text-gray-600">FDR:</span> <strong>{report.captain_recommendations.captain.fdr.toFixed(0)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-600">Score:</span> <strong>{report.captain_recommendations.captain.captain_score.toFixed(2)}</strong>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2">{report.captain_recommendations.captain.reason}</p>
+                    </div>
+                  </div>
+                )}
+                {report.captain_recommendations.vice_captain && (
+                  <div className="bg-retro-background p-4 border-2 border-retro-primary">
+                    <h3 className="text-sm font-bold uppercase mb-2">Vice-Captain (V)</h3>
+                    <div className="space-y-1 text-sm">
+                      <p><strong>{report.captain_recommendations.vice_captain.name}</strong> ({report.captain_recommendations.vice_captain.team})</p>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <span className="text-xs text-gray-600">EV:</span> <strong>{report.captain_recommendations.vice_captain.ev.toFixed(2)}</strong>
+                        </div>
+                        {report.captain_recommendations.vice_captain.form && (
+                          <div>
+                            <span className="text-xs text-gray-600">Form:</span> <strong>{report.captain_recommendations.vice_captain.form.toFixed(1)}</strong>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs text-gray-600">FDR:</span> <strong>{report.captain_recommendations.vice_captain.fdr.toFixed(0)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-xs text-gray-600">Score:</span> <strong>{report.captain_recommendations.vice_captain.captain_score.toFixed(2)}</strong>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-2">{report.captain_recommendations.vice_captain.reason}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Chip Recommendation */}
           <div>
             <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Chip Recommendation</h2>

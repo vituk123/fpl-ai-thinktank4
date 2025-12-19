@@ -107,10 +107,10 @@ export const entryApi = {
     }
   },
   getCurrentGameweek: async (): Promise<number> => {
+    // ByteHosty server as primary backend
+    const bytehostyUrl = 'http://198.23.185.233:8080';
     try {
-      // Try GCE VM first
-      const gceVmUrl = 'http://35.192.15.52';
-      const response = await axios.get(`${gceVmUrl}/api/v1/gameweek/current`, {
+      const response = await axios.get(`${bytehostyUrl}/api/v1/gameweek/current`, {
         timeout: 10000
       });
       if (response.data?.data?.gameweek) {
@@ -132,19 +132,19 @@ export const entryApi = {
   },
 };
 
-// Helper function to call dashboard endpoints with GCE VM fallback
+// Helper function to call dashboard endpoints with ByteHosty primary and Render fallback
 const callDashboardEndpoint = async (endpoint: string, params?: Record<string, any>) => {
-  const gceVmUrl = 'http://35.192.15.52';
+  const bytehostyUrl = 'http://198.23.185.233:8080';
   const queryString = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : '';
   
   try {
-    // Try GCE VM first (where new endpoints are deployed)
-    const response = await axios.get(`${gceVmUrl}/api/v1${endpoint}${queryString}`, {
+    // Try ByteHosty server first (primary backend)
+    const response = await axios.get(`${bytehostyUrl}/api/v1${endpoint}${queryString}`, {
       timeout: 30000 // 30 second timeout (increased for slow database queries)
     });
     return response.data;
-  } catch (gceError: any) {
-    console.warn(`Dashboard API: GCE VM failed for ${endpoint}, trying Render fallback:`, gceError.message);
+  } catch (bytehostyError: any) {
+    console.warn(`Dashboard API: ByteHosty failed for ${endpoint}, trying Render fallback:`, bytehostyError.message);
     // Fallback to Render
     try {
       const response = await renderClient.get(`${endpoint}${queryString}`, {
@@ -152,8 +152,8 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
       });
       return response.data;
     } catch (renderError: any) {
-      console.error(`Dashboard API: Both GCE VM and Render failed for ${endpoint}:`, {
-        gceError: gceError.message,
+      console.error(`Dashboard API: Both ByteHosty and Render failed for ${endpoint}:`, {
+        bytehostyError: bytehostyError.message,
         renderError: renderError.message,
         renderStatus: renderError.response?.status
       });
@@ -281,14 +281,14 @@ export const mlApi = {
     return { players: [] };
   },
   getMLReport: async (entryId: number, gameweek: number | undefined, fastMode: boolean = true): Promise<MLReport> => {
-    // Try GCP directly first for full mode (bypasses Supabase 60s timeout)
+    // ByteHosty server for full mode (bypasses Supabase 60s timeout)
     // For fast mode, use Supabase edge function (faster, stays under timeout)
-    const useDirectGCP = !fastMode; // Use direct GCP for full mode
+    const useDirectServer = !fastMode; // Use direct ByteHosty server for full mode
     
-    if (useDirectGCP) {
-      // Call GCE VM directly to avoid Supabase timeout for full ML analysis
-      const gceVmUrl = 'http://35.192.15.52';
-      console.log('mlApi.getMLReport: Calling GCE VM directly for full ML report');
+    if (useDirectServer) {
+      // Call ByteHosty server directly to avoid Supabase timeout for full ML analysis
+      const bytehostyUrl = 'http://198.23.185.233:8080';
+      console.log('mlApi.getMLReport: Calling ByteHosty server directly for full ML report');
       const params: any = {
         entry_id: entryId,
         model_version: 'v4.6',
@@ -298,15 +298,36 @@ export const mlApi = {
       if (gameweek !== undefined && gameweek !== null) {
         params.gameweek = gameweek;
       }
-      const response = await axios.get(`${gceVmUrl}/api/v1/ml/report`, {
-        params: params,
-        timeout: 300000 // 5 minute timeout for full ML report
-      });
-      const responseData = response.data;
-      if (responseData?.data) {
-        return responseData.data;
+      try {
+        const response = await axios.get(`${bytehostyUrl}/api/v1/ml/report`, {
+          params: params,
+          timeout: 300000 // 5 minute timeout for full ML report
+        });
+        const responseData = response.data;
+        if (responseData?.data) {
+          return responseData.data;
+        }
+        return responseData;
+      } catch (bytehostyError: any) {
+        console.warn('mlApi.getMLReport: ByteHosty failed, falling back to Supabase:', bytehostyError.message);
+        // Fallback to Supabase edge function
+        const params = new URLSearchParams({
+          entry_id: String(entryId),
+          model_version: 'v4.6',
+          fast_mode: String(fastMode)
+        });
+        if (gameweek !== undefined && gameweek !== null) {
+          params.append('gameweek', String(gameweek));
+        }
+        const response = await supabaseClient.get(`/ml-report?${params.toString()}`, {
+          timeout: 300000 // Extended timeout for fallback
+        });
+        const responseData = response.data;
+        if (responseData?.data) {
+          return responseData.data;
+        }
+        return responseData;
       }
-      return responseData;
     } else {
       // Use Supabase edge function for fast mode (stays under 60s timeout)
       const params = new URLSearchParams({
@@ -379,17 +400,60 @@ export const imagesApi = {
   // Get player image from Supabase storage bucket 'fpl-images' at path 'players/{playerId}.png'
   // Supabase storage public URL format: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
   // Verified: Images are stored at: players/{playerId}.png in the 'fpl-images' bucket
-  getPlayerImageUrl: (playerId: number) => {
+  getPlayerImageUrl: (playerId: number | string | null | undefined) => {
+    // Validate inputs
+    if (!playerId || playerId === 0) {
+      // Return a placeholder or fallback URL
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+    }
+    
+    // Ensure playerId is a number
+    const id = typeof playerId === 'string' ? parseInt(playerId, 10) : playerId;
+    if (isNaN(id) || id <= 0) {
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+    }
+    
+    // Ensure SUPABASE_URL is defined and valid
+    const baseUrl = SUPABASE_URL?.trim();
+    if (!baseUrl || baseUrl === 'undefined' || baseUrl === 'null' || !baseUrl.startsWith('http')) {
+      console.warn('[imagesApi] SUPABASE_URL is invalid, using FPL fallback for player', id, 'SUPABASE_URL:', SUPABASE_URL);
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
+    }
+    
     // Supabase get_public_url adds a query parameter, but it's optional for public buckets
     // We'll use the base URL without query params first
-    const url = `${SUPABASE_URL}/storage/v1/object/public/fpl-images/players/${playerId}.png`;
+    // Ensure the URL is absolute (starts with http:// or https://)
+    const url = `${baseUrl.replace(/\/$/, '')}/storage/v1/object/public/fpl-images/players/${id}.png`;
+    
+    // Validate the final URL is absolute
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      console.error('[imagesApi] Generated invalid URL (not absolute):', url, 'for player', id);
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
+    }
+    
+    // Debug logging in development
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      console.log(`[imagesApi] Generated Supabase URL for player ${id}:`, url);
+    }
+    
     return url;
   },
   // Fallback: FPL API photo URL (same format as backend uses)
-  getPlayerImageUrlFPL: (playerId: number) => {
-    const url = `https://resources.fantasy.premierleague.com/drf/element_photos/${playerId}.png`;
+  getPlayerImageUrlFPL: (playerId: number | string | null | undefined) => {
+    // Validate inputs
+    if (!playerId || playerId === 0) {
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+    }
+    
+    // Ensure playerId is a number
+    const id = typeof playerId === 'string' ? parseInt(playerId, 10) : playerId;
+    if (isNaN(id) || id <= 0) {
+      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+    }
+    
+    const url = `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      console.log(`[imagesApi] Generated FPL URL for player ${playerId}:`, url);
+      console.log(`[imagesApi] Generated FPL URL for player ${id}:`, url);
     }
     return url;
   },

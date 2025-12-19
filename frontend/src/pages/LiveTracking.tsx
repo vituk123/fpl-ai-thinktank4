@@ -13,10 +13,10 @@ const LiveTracking: React.FC = () => {
 
   // Fetch live data - optimize by fetching gameweek and live data in parallel
   useEffect(() => {
-    if (!entryId) {
-      setLoading(false);
-      return;
-    }
+      if (!entryId) {
+        setLoading(false);
+        return;
+      }
 
     const fetchData = async () => {
       try {
@@ -63,10 +63,10 @@ const LiveTracking: React.FC = () => {
           // If live data fetch failed but we have gameweek, try fetching with correct gameweek
           try {
             const data = await liveApi.getLiveGameweek(gameweek, entryId);
-            setLiveData(data);
-            setLastUpdated(new Date());
-          } catch (e: any) {
-            console.error("LiveTracking: Fetch error:", e);
+        setLiveData(data);
+        setLastUpdated(new Date());
+      } catch (e: any) {
+        console.error("LiveTracking: Fetch error:", e);
             setLiveData(null);
           }
         } else {
@@ -78,7 +78,7 @@ const LiveTracking: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
+  };
 
     fetchData();
     const interval = setInterval(fetchData, 60000); // 60s auto refresh
@@ -180,7 +180,7 @@ const LiveTracking: React.FC = () => {
     
     return status;
   };
-
+  
   // Transform player_breakdown to match component expectations
   // Handle both Render backend format (has 'name', 'minutes', 'status', 'photo') and Edge Function format (has 'player_name', 'player_id')
   const elements = playerBreakdown.map((player: any, index: number) => {
@@ -371,7 +371,7 @@ const LiveTracking: React.FC = () => {
                              <div className="flex-1">
                                  <div className="flex justify-between items-center">
                                          <div className="flex items-center gap-1">
-                                           <span className="font-bold text-sm">{pick.web_name}</span>
+                                         <span className="font-bold text-sm">{pick.web_name}</span>
                                            {pick.is_captain && (
                                              <span className="bg-retro-primary text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
                                                C
@@ -466,7 +466,7 @@ const LiveTracking: React.FC = () => {
                                    <div className="flex-1">
                                        <div className="flex justify-between items-center">
                                          <div className="flex items-center gap-1">
-                                           <span className="font-bold text-sm">{pick.web_name}</span>
+                                         <span className="font-bold text-sm">{pick.web_name}</span>
                                            {pick.is_captain && (
                                              <span className="bg-retro-primary text-white border border-black text-[10px] w-5 h-5 flex items-center justify-center font-bold rounded-none">
                                                C

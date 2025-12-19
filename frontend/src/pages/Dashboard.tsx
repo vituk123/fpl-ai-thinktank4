@@ -190,7 +190,7 @@ const Dashboard: React.FC = () => {
                                 border: '2.5px solid #1D1D1B', 
                                 boxShadow: '4px 4px 0 rgba(0,0,0,0.2)',
                                 borderRadius: 0 
-                            }}
+                            }} 
                             formatter={(value: any) => {
                                 const rank = Number(value);
                                 if (rank >= 1000000) {

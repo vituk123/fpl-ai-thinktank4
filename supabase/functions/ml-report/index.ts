@@ -16,19 +16,19 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const gceVmApiUrl = Deno.env.get('GCE_VM_API_URL')
+    const bytehostyApiUrl = Deno.env.get('BYTEHOSTY_API_URL')
     const gcpApiUrl = Deno.env.get('GCP_API_URL')
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
-    console.log('ml-report: GCE_VM_API_URL:', gceVmApiUrl ? 'SET' : 'NOT SET')
+    console.log('ml-report: BYTEHOSTY_API_URL:', bytehostyApiUrl ? 'SET' : 'NOT SET')
     console.log('ml-report: GCP_API_URL:', gcpApiUrl ? 'SET' : 'NOT SET')
     console.log('ml-report: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
     
-    if (!gceVmApiUrl && !gcpApiUrl && !renderApiUrl) {
+    if (!bytehostyApiUrl && !gcpApiUrl && !renderApiUrl) {
       console.error('ml-report: No backend API URLs are set')
       return new Response(
         JSON.stringify({ 
           error: 'ML service configuration error: No backend API URLs are set',
-          details: 'Please set GCE_VM_API_URL, GCP_API_URL, or RENDER_API_URL secret in Supabase'
+          details: 'Please set BYTEHOSTY_API_URL, GCP_API_URL, or RENDER_API_URL secret in Supabase'
         }),
         { 
           status: 503, 
@@ -63,9 +63,9 @@ Deno.serve(async (req: Request) => {
     })
     if (gameweek) params.append('gameweek', gameweek)
 
-    // Priority: GCE VM → GCP Cloud Run → Render
-    let apiUrl = gceVmApiUrl || gcpApiUrl || renderApiUrl
-    let backendName = gceVmApiUrl ? 'GCE VM' : (gcpApiUrl ? 'GCP' : 'Render')
+    // Priority: ByteHosty → GCP Cloud Run → Render
+    let apiUrl = bytehostyApiUrl || gcpApiUrl || renderApiUrl
+    let backendName = bytehostyApiUrl ? 'ByteHosty' : (gcpApiUrl ? 'GCP' : 'Render')
     const backendUrl = `${apiUrl}/api/v1/ml/report?${params.toString()}`
     console.log('ml-report: Calling backend URL:', backendUrl.replace(apiUrl, `[${backendName}_URL]`))
     
@@ -96,8 +96,8 @@ Deno.serve(async (req: Request) => {
         console.error(`${backendName} API error ${response.status}:`, errorText.substring(0, 1000))
         
         // Try fallback backends in priority order
-        if (apiUrl === gceVmApiUrl && (gcpApiUrl || renderApiUrl)) {
-          // GCE VM failed, try GCP or Render
+        if (apiUrl === bytehostyApiUrl && (gcpApiUrl || renderApiUrl)) {
+          // ByteHosty failed, try GCP or Render
           const fallbackUrl = gcpApiUrl 
             ? `${gcpApiUrl}/api/v1/ml/report?${params.toString()}`
             : `${renderApiUrl}/api/v1/ml/report?${params.toString()}`
@@ -272,7 +272,7 @@ Deno.serve(async (req: Request) => {
         errorMessage = renderErrorDetails.fullErrorText.substring(0, 2000)
       }
     } else if (error instanceof Error) {
-      if (error.message.includes('GCE_VM_API_URL') || error.message.includes('GCP_API_URL') || error.message.includes('RENDER_API_URL')) {
+      if (error.message.includes('BYTEHOSTY_API_URL') || error.message.includes('GCP_API_URL') || error.message.includes('RENDER_API_URL')) {
         errorMessage = 'ML service configuration error: No backend API URLs are set in Supabase environment variables'
         statusCode = 503
       } else if (error.message.includes('timeout')) {
@@ -292,7 +292,7 @@ Deno.serve(async (req: Request) => {
         message: error instanceof Error ? error.message : String(error),
         fullError: fullError,
         renderError: renderErrorDetails,
-        details: 'Check Supabase Edge Function logs and ensure GCE_VM_API_URL, GCP_API_URL, or RENDER_API_URL is configured'
+        details: 'Check Supabase Edge Function logs and ensure BYTEHOSTY_API_URL, GCP_API_URL, or RENDER_API_URL is configured'
       }),
       { 
         status: statusCode,

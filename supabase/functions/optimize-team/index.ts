@@ -15,14 +15,14 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const gceVmApiUrl = Deno.env.get('GCE_VM_API_URL')
+    const bytehostyApiUrl = Deno.env.get('BYTEHOSTY_API_URL')
     const gcpApiUrl = Deno.env.get('GCP_API_URL')
     const renderApiUrl = Deno.env.get('RENDER_API_URL')
-    console.log('optimize-team: GCE_VM_API_URL:', gceVmApiUrl ? 'SET' : 'NOT SET')
+    console.log('optimize-team: BYTEHOSTY_API_URL:', bytehostyApiUrl ? 'SET' : 'NOT SET')
     console.log('optimize-team: GCP_API_URL:', gcpApiUrl ? 'SET' : 'NOT SET')
     console.log('optimize-team: RENDER_API_URL:', renderApiUrl ? 'SET' : 'NOT SET')
     
-    if (!gceVmApiUrl && !gcpApiUrl && !renderApiUrl) {
+    if (!bytehostyApiUrl && !gcpApiUrl && !renderApiUrl) {
       throw new Error('No backend API URLs are set')
     }
 
@@ -45,9 +45,9 @@ Deno.serve(async (req: Request) => {
     })
     if (gameweek) params.append('gameweek', gameweek)
 
-    // Priority: GCE VM → GCP Cloud Run → Render
-    let apiUrl = gceVmApiUrl || gcpApiUrl || renderApiUrl
-    let backendName = gceVmApiUrl ? 'GCE VM' : (gcpApiUrl ? 'GCP' : 'Render')
+    // Priority: ByteHosty → GCP Cloud Run → Render
+    let apiUrl = bytehostyApiUrl || gcpApiUrl || renderApiUrl
+    let backendName = bytehostyApiUrl ? 'ByteHosty' : (gcpApiUrl ? 'GCP' : 'Render')
     const backendUrl = `${apiUrl}/api/v1/optimize/team?${params.toString()}`
     console.log('optimize-team: Calling backend URL:', backendUrl.replace(apiUrl, `[${backendName}_URL]`))
     
@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
         const errorText = await response.text()
         
         // Try fallback backends in priority order
-        if (apiUrl === gceVmApiUrl && (gcpApiUrl || renderApiUrl)) {
+        if (apiUrl === bytehostyApiUrl && (gcpApiUrl || renderApiUrl)) {
           const fallbackUrl = gcpApiUrl 
             ? `${gcpApiUrl}/api/v1/optimize/team?${params.toString()}`
             : `${renderApiUrl}/api/v1/optimize/team?${params.toString()}`

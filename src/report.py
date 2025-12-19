@@ -863,7 +863,8 @@ class ReportGenerator:
             "fixture_insights": fixture_insights,
             "transfer_recommendations": transfer_recommendations,
             "updated_squad": updated_squad,
-            "chip_recommendation": chip_recommendation
+            "chip_recommendation": chip_recommendation,
+            "captain_recommendations": {}  # Will be populated by ml_report_v2.py
         }
         
         # Final pass to convert any remaining numpy types

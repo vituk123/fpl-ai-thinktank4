@@ -369,15 +369,10 @@ class VisualizationDashboard:
                                 points = 0
                                 if self.db_manager:
                                     history_df = self.db_manager.get_current_season_history()
-                                    # #region agent log
-                                    import json; log_data = {'location': 'visualization_dashboard.py:369', 'message': 'Captain points lookup', 'data': {'player_id': player_id, 'gw': gw, 'history_df_empty': history_df.empty, 'history_df_shape': list(history_df.shape) if not history_df.empty else None, 'history_df_columns': list(history_df.columns) if not history_df.empty else None}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'post-fix', 'hypothesisId': 'A'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
-                                    # #endregion
-                                    player_gw = history_df[(history_df['player_id'] == player_id) & (history_df['gw'] == gw)]
-                                    # #region agent log
-                                    log_data = {'location': 'visualization_dashboard.py:371', 'message': 'Captain points after filter', 'data': {'player_gw_empty': player_gw.empty, 'points_found': int(player_gw.iloc[0]['total_points']) if not player_gw.empty else 0}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'post-fix', 'hypothesisId': 'A'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
-                                    # #endregion
-                                    if not player_gw.empty:
-                                        points = int(player_gw.iloc[0]['total_points'])
+                                    if not history_df.empty:
+                                        player_gw = history_df[(history_df['player_id'] == player_id) & (history_df['gw'] == gw)]
+                                        if not player_gw.empty:
+                                            points = int(player_gw.iloc[0]['total_points'])
                                 
                                 # Fallback: Use bootstrap data if database has no points
                                 # Approximate GW points from season total
@@ -400,7 +395,8 @@ class VisualizationDashboard:
                                 
                                 # Count total times captained
                                 captain_counts[player_name] = captain_counts.get(player_name, 0) + 1
-                except:
+                except Exception as e:
+                    logger.debug(f"Error getting captain picks for GW{gw}: {e}")
                     continue
             
             # Update times_captained
