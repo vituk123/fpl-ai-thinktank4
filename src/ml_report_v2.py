@@ -566,11 +566,23 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         # Add captain recommendations to report data
         report_data['captain_recommendations'] = captain_recommendations
         
-        # CRITICAL: Verify gameweek in report_data
-        if 'header' in report_data and 'gameweek' in report_data['header']:
-            logger.info(f"ML Report V2: Report data header gameweek = {report_data['header']['gameweek']}")
+        # CRITICAL: Verify and enforce gameweek in report_data
+        if 'header' in report_data:
+            reported_gw = report_data['header'].get('gameweek')
+            if reported_gw != gameweek:
+                logger.warning(f"ML Report V2: Report header gameweek mismatch! Expected {gameweek}, got {reported_gw}. Fixing...")
+                report_data['header']['gameweek'] = gameweek
+            logger.info(f"ML Report V2: Report data header gameweek = {report_data['header']['gameweek']} (verified)")
         else:
-            logger.warning(f"ML Report V2: Report data missing header.gameweek! Keys: {list(report_data.keys())}")
+            logger.error(f"ML Report V2: Report data missing header! Keys: {list(report_data.keys())}")
+            # Create header if missing
+            from datetime import datetime
+            report_data['header'] = {
+                "manager": entry_info.get('player_first_name', '') + ' ' + entry_info.get('player_last_name', ''),
+                "team": entry_info.get('name', 'Unknown'),
+                "gameweek": gameweek,
+                "generated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
         
         # #region agent log
         if 'transfer_recommendations' in report_data:
