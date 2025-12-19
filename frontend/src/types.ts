@@ -171,27 +171,4 @@ export interface MLReport {
       };
     };
   };
-  captain_recommendations?: {
-    captain: {
-      id: number;
-      name: string;
-      team: string;
-      ev: number;
-      form: number | null;
-      fdr: number;
-      captain_score: number;
-      reason: string;
-    } | null;
-    vice_captain: {
-      id: number;
-      name: string;
-      team: string;
-      ev: number;
-      form: number | null;
-      fdr: number;
-      captain_score: number;
-      reason: string;
-    } | null;
-    reason?: string;
-  };
 }

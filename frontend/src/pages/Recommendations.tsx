@@ -19,24 +19,14 @@ const Recommendations: React.FC = () => {
         return;
       }
       try {
-        // CRITICAL: Always pass undefined for gameweek so backend uses its own logic (latest finished gameweek)
-        // Add cache-busting timestamp to prevent browser/axios caching
-        const cacheBuster = `?t=${Date.now()}`;
-        console.log('ML Report: Fetching for entryId:', entryId, 'with cache-busting');
-        
-        // Use fast_mode=false to get full ML analysis
+        console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
+        // Always pass undefined so backend uses its own current gameweek logic (latest played gameweek)
+        // The ML system correctly determines the latest played gameweek based on data availability
+        // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
         const data = await mlApi.getMLReport(entryId, undefined, false);
-        
         console.log('ML Report: Received data:', data);
         console.log('ML Report: Header gameweek from API:', data?.header?.gameweek);
         console.log('ML Report: Full header:', data?.header);
-        
-        // CRITICAL: Verify gameweek is present and valid
-        if (!data?.header?.gameweek) {
-          console.error('ML Report: ERROR - No gameweek in response header!', data);
-          throw new Error('Invalid response: missing gameweek');
-        }
-        
         // Debug: Log transfer recommendations data
         if (data?.transfer_recommendations?.top_suggestion) {
           const topSug = data.transfer_recommendations.top_suggestion;
@@ -47,16 +37,19 @@ const Recommendations: React.FC = () => {
               name: topSug.players_out[0].name,
               element_type: topSug.players_out[0].element_type,
               fdr: topSug.players_out[0].fdr,
+              fixture_difficulty: topSug.players_out[0].fixture_difficulty,
               allFields: topSug.players_out[0]
             });
           }
         }
-        
-        // CRITICAL: Set report data - this is the source of truth for gameweek display
         setReport(data);
         setError(null);
         
-        console.log('ML Report: Set report with gameweek:', data.header.gameweek);
+        // Update currentGameweek from the ML report response (this is the actual gameweek analyzed)
+        if (data?.header?.gameweek) {
+          console.log('ML Report: Updating currentGameweek from report:', data.header.gameweek);
+          // Note: We can't directly update context here, but the report will display the correct gameweek
+        }
       } catch (e: any) {
         console.error('ML Report: Error fetching:', e);
         // Check if it's a timeout error
@@ -71,9 +64,7 @@ const Recommendations: React.FC = () => {
       }
     };
     fetchReport();
-    // CRITICAL: Only depend on entryId, NOT currentGameweek (which may be stale)
-    // The backend determines the correct gameweek, and we display it from the report
-  }, [entryId]);
+  }, [entryId, currentGameweek]);
 
   if (!entryId) {
     return (
@@ -548,65 +539,6 @@ const Recommendations: React.FC = () => {
             </div>
           )}
 
-          {/* Captain & Vice-Captain Recommendations */}
-          {report.captain_recommendations && (report.captain_recommendations.captain || report.captain_recommendations.vice_captain) && (
-            <div>
-              <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Captain & Vice-Captain Recommendations</h2>
-              <div className="space-y-4">
-                {report.captain_recommendations.captain && (
-                  <div className="bg-retro-background p-4 border-2 border-retro-primary">
-                    <h3 className="text-sm font-bold uppercase mb-2">Captain (C)</h3>
-                    <div className="space-y-1 text-sm">
-                      <p><strong>{report.captain_recommendations.captain.name}</strong> ({report.captain_recommendations.captain.team})</p>
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <div>
-                          <span className="text-xs text-gray-600">EV:</span> <strong>{report.captain_recommendations.captain.ev.toFixed(2)}</strong>
-                        </div>
-                        {report.captain_recommendations.captain.form && (
-                          <div>
-                            <span className="text-xs text-gray-600">Form:</span> <strong>{report.captain_recommendations.captain.form.toFixed(1)}</strong>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-xs text-gray-600">FDR:</span> <strong>{report.captain_recommendations.captain.fdr.toFixed(0)}</strong>
-                        </div>
-                        <div>
-                          <span className="text-xs text-gray-600">Score:</span> <strong>{report.captain_recommendations.captain.captain_score.toFixed(2)}</strong>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-2">{report.captain_recommendations.captain.reason}</p>
-                    </div>
-                  </div>
-                )}
-                {report.captain_recommendations.vice_captain && (
-                  <div className="bg-retro-background p-4 border-2 border-retro-primary">
-                    <h3 className="text-sm font-bold uppercase mb-2">Vice-Captain (V)</h3>
-                    <div className="space-y-1 text-sm">
-                      <p><strong>{report.captain_recommendations.vice_captain.name}</strong> ({report.captain_recommendations.vice_captain.team})</p>
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <div>
-                          <span className="text-xs text-gray-600">EV:</span> <strong>{report.captain_recommendations.vice_captain.ev.toFixed(2)}</strong>
-                        </div>
-                        {report.captain_recommendations.vice_captain.form && (
-                          <div>
-                            <span className="text-xs text-gray-600">Form:</span> <strong>{report.captain_recommendations.vice_captain.form.toFixed(1)}</strong>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-xs text-gray-600">FDR:</span> <strong>{report.captain_recommendations.vice_captain.fdr.toFixed(0)}</strong>
-                        </div>
-                        <div>
-                          <span className="text-xs text-gray-600">Score:</span> <strong>{report.captain_recommendations.vice_captain.captain_score.toFixed(2)}</strong>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-2">{report.captain_recommendations.vice_captain.reason}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Chip Recommendation */}
           <div>
             <h2 className="text-lg font-bold uppercase mb-3 border-b-2 border-retro-primary pb-1">Chip Recommendation</h2>
@@ -616,7 +548,7 @@ const Recommendations: React.FC = () => {
               </p>
               {Object.entries(report.chip_recommendation.evaluations).length > 0 && (
                 <ul className="list-disc list-inside space-y-1 text-sm mt-2">
-                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]: [string, { recommend: boolean; ev_gain: number; reason: string }]) => (
+                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
                     <li key={chipName}>
                       <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
                     </li>

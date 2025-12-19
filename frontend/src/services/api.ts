@@ -299,16 +299,9 @@ export const mlApi = {
         params.gameweek = gameweek;
       }
       try {
-        // Add cache-busting to prevent stale responses
-        const cacheBuster = Date.now();
         const response = await axios.get(`${bytehostyUrl}/api/v1/ml/report`, {
-          params: { ...params, _t: cacheBuster },
-          timeout: 300000, // 5 minute timeout for full ML report
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+          params: params,
+          timeout: 300000 // 5 minute timeout for full ML report
         });
         const responseData = response.data;
         if (responseData?.data) {
