@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import DesktopWindow from '../components/retroui/DesktopWindow';
 import { useAppContext } from '../context/AppContext';
 import { mlApi, imagesApi } from '../services/api';
@@ -11,22 +11,101 @@ const Recommendations: React.FC = () => {
   const [report, setReport] = useState<MLReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchingRef = useRef(false); // Prevent multiple simultaneous API calls
 
   useEffect(() => {
     const fetchReport = async () => {
+      // Prevent multiple simultaneous calls
+      if (fetchingRef.current) {
+        // #region agent log
+        const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
+        fetch(logEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: `skip_${Date.now()}`,
+            hypothesisId: 'O',
+            location: 'Recommendations.tsx:useEffect:skip_duplicate',
+            message: 'Skipping duplicate API call',
+            data: { entryId, isFetching: fetchingRef.current },
+            timestamp: Date.now()
+          })
+        }).catch(() => {});
+        // #endregion
+        return;
+      }
       if (!entryId) {
         setLoading(false);
         return;
       }
+      
+      // Clear any stale report data to force fresh fetch
+      setReport(null);
+      setError(null);
+      // #region agent log
+      const runId = `run_${Date.now()}`;
+      const sessionId = 'debug-session';
+      const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
+      const logData = (location: string, message: string, data: any, hypothesisId: string) => {
+        fetch(logEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, runId, hypothesisId, location, message, data, timestamp: Date.now() })
+        }).catch(() => {});
+      };
+      // #endregion
+      
+      fetchingRef.current = true; // Mark as fetching
+      
+      // #region agent log
+      logData('Recommendations.tsx:useEffect:entry', 'useEffect triggered', {
+        entryId,
+        currentGameweek,
+        localStorage_entryId: localStorage.getItem('fpl_entry_id'),
+        localStorage_entryInfo: localStorage.getItem('fpl_entry_info'),
+        existing_report_gameweek: report?.header?.gameweek,
+        isFetching: fetchingRef.current
+      }, 'A');
+      // #endregion
+      
       try {
+        // #region agent log
+        logData('Recommendations.tsx:fetchReport:before_api', 'Before API call', {
+          entryId,
+          currentGameweek,
+          gameweek_param: undefined,
+          fastMode: false
+        }, 'B');
+        // #endregion
+        
         console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
         // Always pass undefined so backend uses its own current gameweek logic (latest played gameweek)
         // The ML system correctly determines the latest played gameweek based on data availability
         // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
         const data = await mlApi.getMLReport(entryId, undefined, false);
+        
+        // #region agent log
+        logData('Recommendations.tsx:fetchReport:after_api', 'After API call', {
+          received_gameweek: data?.header?.gameweek,
+          received_header: data?.header,
+          has_transfer_recommendations: !!data?.transfer_recommendations,
+          data_keys: data ? Object.keys(data) : []
+        }, 'C');
+        // #endregion
+        
         console.log('ML Report: Received data:', data);
         console.log('ML Report: Header gameweek from API:', data?.header?.gameweek);
         console.log('ML Report: Full header:', data?.header);
+        
+        // CRITICAL: Log gameweek comparison for debugging
+        if (data?.header?.gameweek) {
+          console.log('ML Report: Gameweek comparison', {
+            received_gameweek: data.header.gameweek,
+            context_gameweek: currentGameweek,
+            timestamp: new Date().toISOString()
+          });
+        }
         // Debug: Log transfer recommendations data
         if (data?.transfer_recommendations?.top_suggestion) {
           const topSug = data.transfer_recommendations.top_suggestion;
@@ -41,8 +120,32 @@ const Recommendations: React.FC = () => {
             });
           }
         }
+        
+        // #region agent log
+        logData('Recommendations.tsx:fetchReport:before_setReport', 'Before setReport', {
+          old_report_gameweek: report?.header?.gameweek,
+          new_report_gameweek: data?.header?.gameweek,
+          will_update: report?.header?.gameweek !== data?.header?.gameweek
+        }, 'D');
+        // #endregion
+        
         setReport(data);
         setError(null);
+        
+        // #region agent log
+        logData('Recommendations.tsx:fetchReport:after_setReport', 'After setReport', {
+          set_gameweek: data?.header?.gameweek,
+          context_gameweek: currentGameweek
+        }, 'E');
+        // #endregion
+        
+        // CRITICAL: Verify we got valid data with a gameweek
+        if (!data?.header?.gameweek) {
+          console.error('ML Report: Received data without gameweek!', data);
+          setError('Invalid response: No gameweek in report header');
+          setReport(null);
+          return;
+        }
         
         // Update currentGameweek from the ML report response (this is the actual gameweek analyzed)
         if (data?.header?.gameweek) {
@@ -50,6 +153,14 @@ const Recommendations: React.FC = () => {
           // Note: We can't directly update context here, but the report will display the correct gameweek
         }
       } catch (e: any) {
+        // #region agent log
+        logData('Recommendations.tsx:fetchReport:error', 'API call error', {
+          error_message: e.message,
+          error_response: e.response?.data,
+          is_timeout: e.message?.includes('timeout') || e.response?.data?.timeout
+        }, 'F');
+        // #endregion
+        
         console.error('ML Report: Error fetching:', e);
         // Check if it's a timeout error
         if (e.message?.includes('timeout') || e.response?.data?.timeout) {
@@ -60,15 +171,17 @@ const Recommendations: React.FC = () => {
         setReport(null);
       } finally {
         setLoading(false);
+        fetchingRef.current = false; // Reset fetching flag
       }
     };
     fetchReport();
-  }, [entryId, currentGameweek]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryId]); // Removed currentGameweek dependency - it causes unnecessary re-fetches and race conditions
 
   if (!entryId) {
     return (
       <div className="p-4 md:p-8 pb-24">
-        <DesktopWindow title="FPL Analysis Report" className="max-w-7xl mx-auto">
+        <DesktopWindow title="Team Optimization" className="max-w-7xl mx-auto">
           <div className="p-6 text-center">
             <p className="text-retro-error font-bold mb-2">No Entry ID</p>
             <p className="text-sm opacity-60">Please enter your FPL entry ID on the landing page to view ML report.</p>
@@ -97,7 +210,7 @@ const Recommendations: React.FC = () => {
   if (error || !report) {
     return (
       <div className="p-4 md:p-8 pb-24">
-        <DesktopWindow title="FPL Analysis Report" className="max-w-7xl mx-auto">
+        <DesktopWindow title="Team Optimization" className="max-w-7xl mx-auto">
           <div className="p-6 text-center">
             <p className="text-retro-error font-bold mb-2">Error Loading Report</p>
             <p className="text-sm opacity-60">{error || 'ML report not available'}</p>
@@ -111,10 +224,33 @@ const Recommendations: React.FC = () => {
 
   return (
     <div className="p-4 md:p-8 pb-24">
-      <DesktopWindow title={`FPL Analysis Report - GW${report.header.gameweek}`} className="max-w-7xl mx-auto">
+      <DesktopWindow title={`Team Optimization - GW${report.header.gameweek}`} className="max-w-7xl mx-auto">
         <div className="space-y-8">
           {/* Header */}
           <div className="border-b-2 border-retro-primary pb-4">
+            {/* #region agent log */}
+            {(() => {
+              const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
+              fetch(logEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  sessionId: 'debug-session',
+                  runId: `render_${Date.now()}`,
+                  hypothesisId: 'G',
+                  location: 'Recommendations.tsx:render:gameweek_display',
+                  message: 'Rendering gameweek display',
+                  data: {
+                    displayed_gameweek: report.header.gameweek,
+                    context_gameweek: currentGameweek,
+                    report_header: report.header
+                  },
+                  timestamp: Date.now()
+                })
+              }).catch(() => {});
+              return null;
+            })()}
+            {/* #endregion */}
             <h1 className="text-2xl font-bold uppercase mb-2">FPL Analysis Report - GW{report.header.gameweek}</h1>
             <p className="text-sm">
               <strong>Manager:</strong> {report.header.manager}

@@ -88,7 +88,7 @@ const LiveTracking: React.FC = () => {
   if (!entryId) {
     return (
       <div className="p-4 md:p-8 pb-24">
-        <DesktopWindow title={`Live GW${currentGameweek} Tracking`} className="min-h-[600px]">
+        <DesktopWindow title={`Gameweek Points Tracking - GW${currentGameweek}`} className="min-h-[600px]">
           <div className="p-6 text-center">
             <p className="text-retro-error font-bold mb-2">No Entry ID</p>
             <p className="text-sm opacity-60">Please enter your FPL entry ID on the landing page.</p>
@@ -111,7 +111,7 @@ const LiveTracking: React.FC = () => {
   if (!liveData) {
     return (
       <div className="p-4 md:p-8 pb-24">
-        <DesktopWindow title={`Live GW${currentGameweek} Tracking`} className="min-h-[600px]">
+        <DesktopWindow title={`Gameweek Points Tracking - GW${currentGameweek}`} className="min-h-[600px]">
           <div className="p-6 text-center">
             <p className="text-retro-error font-bold mb-2">No live data available</p>
             <p className="text-sm opacity-60">Unable to fetch live gameweek data. Please try again.</p>
@@ -135,6 +135,13 @@ const LiveTracking: React.FC = () => {
   const teamSummaryRaw = data?.team_summary || {};
   const playerBreakdown = data?.player_breakdown || [];
   const autoSubstitutions = data?.auto_substitutions || [];
+  
+  // Get chip information
+  const benchBoostActive = livePoints?.bench_boost_active || false;
+  const tripleCaptainActive = livePoints?.triple_captain_active || false;
+  const currentChip = teamSummaryRaw?.current_chip || null;
+  const freeHitActive = currentChip === 'Free Hit';
+  const wildcardActive = currentChip === 'Wildcard';
   
   console.log("LiveTracking: Player breakdown count:", playerBreakdown.length);
   if (playerBreakdown.length > 0) {
@@ -204,7 +211,7 @@ const LiveTracking: React.FC = () => {
         is_captain: player.is_captain,
         is_vice_captain: player.is_vice_captain || player.is_vice,
         is_starting: player.position <= 11,
-        multiplier: player.is_captain ? 2 : 1,
+        multiplier: player.is_captain ? (tripleCaptainActive ? 3 : 2) : 1,
         minutes_played: player.minutes || 0,
         status: formatStatus(player.status, player.kickoff_time_utc),
         opponent: player.opponent || '',
@@ -230,7 +237,7 @@ const LiveTracking: React.FC = () => {
         is_captain: player.is_captain,
         is_vice_captain: player.is_vice_captain,
         is_starting: player.is_starting,
-        multiplier: player.is_captain ? 2 : 1,
+        multiplier: player.is_captain ? (tripleCaptainActive ? 3 : 2) : 1,
         minutes_played: 0, // Not available from Edge Function
         status: '',
         opponent: '',
@@ -248,14 +255,25 @@ const LiveTracking: React.FC = () => {
   
   return (
     <div className="p-4 md:p-8 pb-24">
-      <DesktopWindow title={`Live GW${currentGameweek} Tracking`} className="min-h-[600px]">
+      <DesktopWindow title={`Gameweek Points Tracking - GW${currentGameweek}`} className="min-h-[600px]">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
             {/* Scoreboard */}
             <div className="lg:col-span-1 space-y-4">
                 <div className="bg-retro-primary text-white p-4 border-2 border-black shadow-[4px_4px_0_rgba(0,0,0,0.2)]">
                     <h3 className="text-xs uppercase font-bold tracking-widest mb-1">Live Points</h3>
-                    <div className="text-5xl font-mono font-bold">{livePoints?.starting_xi || livePoints?.total || 0}</div>
+                    <div className="text-5xl font-mono font-bold">{livePoints?.total || 0}</div>
+                    {/* Bench points in 2x smaller font than text-2xl (text-xl) */}
+                    {livePoints?.bench !== undefined && (
+                      <div className="text-xl font-mono opacity-80 mt-1">Bench: {livePoints.bench}</div>
+                    )}
+                    {/* Chip indicators */}
+                    {(benchBoostActive || freeHitActive) && (
+                      <div className="mt-2 text-xs font-bold uppercase">
+                        {benchBoostActive && <div className="bg-yellow-500 text-black px-2 py-1 inline-block border border-black mb-1">Bench Boost Active</div>}
+                        {freeHitActive && !benchBoostActive && <div className="bg-blue-500 text-white px-2 py-1 inline-block border border-black">Free Hit Active</div>}
+                      </div>
+                    )}
                     <div className="mt-2 text-xs opacity-80 font-mono">
                       GW Rank: {teamSummary.gameweek_rank !== null && teamSummary.gameweek_rank !== undefined ? teamSummary.gameweek_rank.toLocaleString() : '-'}
                     </div>
@@ -266,15 +284,24 @@ const LiveTracking: React.FC = () => {
                 
                 <div className="border-retro border-retro-primary p-4 bg-white">
                     <h3 className="text-xs uppercase font-bold mb-2 border-b-2 border-retro-primary pb-1">Captain</h3>
-                    {elements.filter((p: any) => p.is_captain).map((cap: any) => (
+                    {elements.filter((p: any) => p.is_captain).map((cap: any) => {
+                      // Update multiplier based on triple captain
+                      const multiplier = tripleCaptainActive ? 3 : 2;
+                      return (
                         <div key={cap.id} className="flex items-center space-x-2">
                              <div className="font-bold text-lg">{cap.web_name}</div>
                              <div className="bg-black text-white px-2 text-xs font-bold rounded-none">
-                                {cap.multiplier}x
+                                {multiplier}x
                              </div>
+                             {tripleCaptainActive && (
+                               <div className="bg-yellow-500 text-black px-2 py-1 text-[10px] font-bold uppercase border border-black">
+                                 Triple Captain
+                               </div>
+                             )}
                              <div className="ml-auto font-mono text-xl">{cap.points}</div>
                         </div>
-                    ))}
+                      );
+                    })}
                 </div>
                 
                 {autoSubstitutions.length > 0 && (

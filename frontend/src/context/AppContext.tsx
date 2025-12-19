@@ -36,9 +36,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [entryId]);
 
   useEffect(() => {
+    // #region agent log
+    const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
+    const logData = (location: string, message: string, data: any, hypothesisId: string) => {
+      fetch(logEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'debug-session', runId: `context_${Date.now()}`, hypothesisId, location, message, data, timestamp: Date.now() })
+      }).catch(() => {});
+    };
+    logData('AppContext.tsx:useEffect:entryInfo', 'entryInfo useEffect triggered', {
+      entryInfo_current_event: entryInfo?.current_event,
+      currentGameweek_before: currentGameweek,
+      localStorage_entryInfo: localStorage.getItem('fpl_entry_info')
+    }, 'M');
+    // #endregion
+    
     if (entryInfo) {
       localStorage.setItem('fpl_entry_info', JSON.stringify(entryInfo));
       if (entryInfo.current_event) {
+        // #region agent log
+        logData('AppContext.tsx:useEffect:setting_gameweek', 'Setting currentGameweek from entryInfo', {
+          old_gameweek: currentGameweek,
+          new_gameweek: entryInfo.current_event,
+          entryInfo_current_event: entryInfo.current_event
+        }, 'N');
+        // #endregion
         setCurrentGameweek(entryInfo.current_event);
       }
     } else {

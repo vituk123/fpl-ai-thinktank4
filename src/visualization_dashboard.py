@@ -169,6 +169,107 @@ class VisualizationDashboard:
         try:
             transfers = []
             
+            # Get bootstrap for player name mapping
+            bootstrap = self.api_client.get_bootstrap_static()
+            players_map = {p['id']: p['web_name'] for p in bootstrap['elements']}
+            
+            # Get player history for actual gain calculation
+            history_df = pd.DataFrame()
+            if self.db_manager:
+                history_df = self.db_manager.get_current_season_history()
+            
+            # Helper function to convert player IDs to names
+            def convert_ids_to_names(player_ids):
+                """Convert list of player IDs to list of player names"""
+                if not player_ids:
+                    return []
+                if isinstance(player_ids, list):
+                    return [players_map.get(pid, f'Player {pid}') if isinstance(pid, (int, float)) else str(pid) for pid in player_ids]
+                elif isinstance(player_ids, (int, float)):
+                    return [players_map.get(int(player_ids), f'Player {int(player_ids)}')]
+                else:
+                    return [str(player_ids)]
+            
+            # Helper function to calculate actual gain from player history
+            def calculate_actual_gain(players_in_ids, players_out_ids, gw):
+                """Calculate actual points gain from transfers"""
+                if not players_in_ids or not players_out_ids:
+                    return 0
+                
+                try:
+                    points_in = 0
+                    points_out = 0
+                    
+                    # Try next gameweek first, then current gameweek, then any available gameweek
+                    target_gws = [gw + 1, gw, gw - 1] if gw > 1 else [gw + 1, gw]
+                    
+                    if not history_df.empty:
+                        for pid in players_in_ids:
+                            if isinstance(pid, dict):
+                                pid = pid.get('id', 0)
+                            if not pid or pid == 0:
+                                continue
+                            
+                            # Try multiple gameweeks
+                            for target_gw in target_gws:
+                                if target_gw <= 0:
+                                    continue
+                                player_points = history_df[
+                                    (history_df['player_id'] == int(pid)) & 
+                                    (history_df['gw'] == target_gw)
+                                ]['total_points']
+                                if not player_points.empty:
+                                    points_in += float(player_points.iloc[0])
+                                    break
+                        
+                        for pid in players_out_ids:
+                            if isinstance(pid, dict):
+                                pid = pid.get('id', 0)
+                            if not pid or pid == 0:
+                                continue
+                            
+                            # Try multiple gameweeks
+                            for target_gw in target_gws:
+                                if target_gw <= 0:
+                                    continue
+                                player_points = history_df[
+                                    (history_df['player_id'] == int(pid)) & 
+                                    (history_df['gw'] == target_gw)
+                                ]['total_points']
+                                if not player_points.empty:
+                                    points_out += float(player_points.iloc[0])
+                                    break
+                    else:
+                        # Fallback: Use bootstrap data to get season totals (approximate)
+                        for pid in players_in_ids:
+                            if isinstance(pid, dict):
+                                pid = pid.get('id', 0)
+                            if pid and pid in players_map:
+                                # Get from bootstrap (season total, approximate)
+                                element = next((e for e in bootstrap['elements'] if e['id'] == pid), None)
+                                if element:
+                                    season_total = element.get('total_points', 0)
+                                    # Approximate GW points
+                                    current_gw = self.api_client.get_current_gameweek()
+                                    if current_gw > 0:
+                                        points_in += max(0, season_total // current_gw)
+                        
+                        for pid in players_out_ids:
+                            if isinstance(pid, dict):
+                                pid = pid.get('id', 0)
+                            if pid and pid in players_map:
+                                element = next((e for e in bootstrap['elements'] if e['id'] == pid), None)
+                                if element:
+                                    season_total = element.get('total_points', 0)
+                                    current_gw = self.api_client.get_current_gameweek()
+                                    if current_gw > 0:
+                                        points_out += max(0, season_total // current_gw)
+                    
+                    return points_in - points_out
+                except Exception as e:
+                    logger.debug(f"Error calculating actual gain for GW {gw}: {e}")
+                    return 0
+            
             # Get decisions from database
             if self.db_manager:
                 decisions_df = self.db_manager.get_decisions(entry_id=entry_id)
@@ -178,49 +279,96 @@ class VisualizationDashboard:
                         rec_transfers = row.get('recommended_transfers', {})
                         actual_transfers = row.get('actual_transfers_made', [])
                         
-                        predicted_gain = rec_transfers.get('net_ev_gain', 0) if isinstance(rec_transfers, dict) else 0
+                        # Try multiple ways to get predicted gain
+                        predicted_gain = 0
+                        if isinstance(rec_transfers, dict):
+                            predicted_gain = rec_transfers.get('net_ev_gain', rec_transfers.get('net_ev_gain_adjusted', 0))
+                        elif isinstance(rec_transfers, str):
+                            try:
+                                import json
+                                rec_transfers = json.loads(rec_transfers)
+                                predicted_gain = rec_transfers.get('net_ev_gain', rec_transfers.get('net_ev_gain_adjusted', 0))
+                            except:
+                                pass
                         
-                        # Calculate actual gain (simplified - would need more complex calculation)
-                        actual_gain = 0  # Placeholder
-                        # #region agent log
-                        import json; log_data = {'location': 'visualization_dashboard.py:184', 'message': 'Transfer actual_gain hardcoded', 'data': {'gw': gw, 'predicted_gain': predicted_gain, 'actual_gain': actual_gain}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'B'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
-                        # #endregion
+                        # Get player IDs
+                        players_in_ids = []
+                        players_out_ids = []
+                        if isinstance(rec_transfers, dict):
+                            players_in_ids = rec_transfers.get('players_in', [])
+                            players_out_ids = rec_transfers.get('players_out', [])
+                        elif isinstance(rec_transfers, str):
+                            try:
+                                import json
+                                rec_transfers = json.loads(rec_transfers)
+                                players_in_ids = rec_transfers.get('players_in', [])
+                                players_out_ids = rec_transfers.get('players_out', [])
+                            except:
+                                pass
                         
-                        players_in = rec_transfers.get('players_in', []) if isinstance(rec_transfers, dict) else []
-                        players_out = rec_transfers.get('players_out', []) if isinstance(rec_transfers, dict) else []
+                        # Extract IDs if players_in/out are dicts with 'id' field
+                        if players_in_ids and len(players_in_ids) > 0 and isinstance(players_in_ids[0], dict):
+                            players_in_ids = [p.get('id', 0) for p in players_in_ids if isinstance(p, dict) and p.get('id')]
+                        if players_out_ids and len(players_out_ids) > 0 and isinstance(players_out_ids[0], dict):
+                            players_out_ids = [p.get('id', 0) for p in players_out_ids if isinstance(p, dict) and p.get('id')]
+                        
+                        # Calculate actual gain from player history
+                        actual_gain = calculate_actual_gain(players_in_ids, players_out_ids, gw)
+                        
+                        # Convert IDs to names
+                        players_in_names = convert_ids_to_names(players_in_ids)
+                        players_out_names = convert_ids_to_names(players_out_ids)
                         
                         success_rate = (actual_gain / predicted_gain * 100) if predicted_gain > 0 else 0
                         
                         transfers.append({
                             'gw': gw,
-                            'predicted_gain': round(predicted_gain, 2),
-                            'actual_gain': round(actual_gain, 2),
+                            'predicted_gain': round(float(predicted_gain), 2) if predicted_gain else 0,
+                            'actual_gain': round(float(actual_gain), 2),
                             'success_rate': round(success_rate, 1),
-                            'players_in': players_in,
-                            'players_out': players_out
+                            'players_in': players_in_names,
+                            'players_out': players_out_names
                         })
             
-            # Also get transfers from API
+            # Also get transfers from API (primary source)
             transfers_data = self.api_client.get_entry_transfers(entry_id)
             for transfer in transfers_data:
                 gw = transfer.get('event', 0)
                 if gw > 0:
                     # Check if we already have this GW in decisions
-                    if not any(t['gw'] == gw for t in transfers):
+                    existing_transfer = next((t for t in transfers if t['gw'] == gw), None)
+                    if not existing_transfer:
+                        element_in = transfer.get('element_in', 0)
+                        element_out = transfer.get('element_out', 0)
+                        
+                        # Calculate actual gain
+                        actual_gain = calculate_actual_gain([element_in], [element_out], gw)
+                        
+                        # Convert IDs to names
+                        players_in_names = convert_ids_to_names([element_in])
+                        players_out_names = convert_ids_to_names([element_out])
+                        
                         transfers.append({
                             'gw': gw,
-                            'predicted_gain': 0,
-                            'actual_gain': 0,
+                            'predicted_gain': 0,  # No prediction data from API transfers
+                            'actual_gain': round(float(actual_gain), 2),
                             'success_rate': 0,
-                            'players_in': [transfer.get('element_in', 0)],
-                            'players_out': [transfer.get('element_out', 0)]
+                            'players_in': players_in_names,
+                            'players_out': players_out_names
                         })
+                    else:
+                        # Update existing transfer with API data if it has better info
+                        element_in = transfer.get('element_in', 0)
+                        element_out = transfer.get('element_out', 0)
+                        if not existing_transfer['players_in'] or not existing_transfer['players_out']:
+                            existing_transfer['players_in'] = convert_ids_to_names([element_in])
+                            existing_transfer['players_out'] = convert_ids_to_names([element_out])
             
             transfers.sort(key=lambda x: x['gw'])
             
             return {'transfers': transfers}
         except Exception as e:
-            logger.error(f"Error generating transfer analysis: {e}")
+            logger.error(f"Error generating transfer analysis: {e}", exc_info=True)
             return {'transfers': []}
     
     def get_position_balance(self, entry_id: int, gameweek: Optional[int] = None) -> Dict:
@@ -556,35 +704,41 @@ class VisualizationDashboard:
             # Use database if available, otherwise use bootstrap (season totals as approximation)
             use_bootstrap_fallback = current_gw_data.empty
             
-            for element in bootstrap['elements']:
-                player_id = element['id']
-                player_name = element['web_name']
-                ownership = float(element.get('selected_by_percent', 0))
-                
-                # Get points for this gameweek
-                if not use_bootstrap_fallback:
-                    player_gw = current_gw_data[current_gw_data['player_id'] == player_id] if not current_gw_data.empty else pd.DataFrame()
-                    total_points = int(player_gw.iloc[0]['total_points']) if not player_gw.empty else 0
-                else:
-                    # Fallback: Use bootstrap total_points (season total, approximate for GW)
-                    # Calculate approximate GW points by using season total / current GW
-                    season_total = element.get('total_points', 0)
-                    total_points = max(0, season_total // gameweek) if gameweek > 0 else 0
-                
-                # #region agent log
-                if player_id <= 5:  # Log first 5 players to avoid too many logs
-                    import json; log_data = {'location': 'visualization_dashboard.py:589', 'message': 'Ownership correlation player points', 'data': {'player_id': player_id, 'player_name': player_name, 'use_bootstrap_fallback': use_bootstrap_fallback, 'total_points': total_points}, 'timestamp': int(__import__('time').time() * 1000), 'sessionId': 'debug-session', 'runId': 'post-fix', 'hypothesisId': 'E'}; open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a').write(json.dumps(log_data) + '\n')
-                # #endregion
-                
-                # Calculate differential score (low ownership, high points)
-                differential_score = total_points / (ownership + 1) if ownership > 0 else total_points
-                
-                players.append({
-                    'name': player_name,
-                    'ownership': round(ownership, 1),
-                    'total_points': total_points,
-                    'differential_score': round(differential_score, 2)
-                })
+            # Filter out players with no ownership and no points to reduce noise
+            for element in bootstrap.get('elements', []):
+                try:
+                    player_id = element.get('id')
+                    player_name = element.get('web_name', f'Player {player_id}')
+                    ownership = float(element.get('selected_by_percent', 0))
+                    
+                    # Get points for this gameweek
+                    total_points = 0
+                    if not use_bootstrap_fallback and not current_gw_data.empty:
+                        player_gw = current_gw_data[current_gw_data['player_id'] == player_id]
+                        if not player_gw.empty:
+                            total_points = int(player_gw.iloc[0]['total_points'])
+                    else:
+                        # Fallback: Use bootstrap total_points (season total, approximate for GW)
+                        # Calculate approximate GW points by using season total / current GW
+                        season_total = element.get('total_points', 0)
+                        if gameweek > 0:
+                            total_points = max(0, season_total // gameweek)
+                        else:
+                            total_points = season_total
+                    
+                    # Include all players (filter can be applied on frontend if needed)
+                    # Calculate differential score (low ownership, high points)
+                    differential_score = total_points / (ownership + 1) if ownership > 0 else (total_points if total_points > 0 else 0)
+                    
+                    players.append({
+                        'name': player_name,
+                        'ownership': round(ownership, 1),
+                        'total_points': int(total_points),
+                        'differential_score': round(differential_score, 2)
+                    })
+                except Exception as e:
+                    logger.debug(f"Error processing player {element.get('id', 'unknown')} in ownership correlation: {e}")
+                    continue
             
             # Calculate correlation coefficient
             if players:

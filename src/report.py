@@ -518,6 +518,9 @@ class ReportGenerator:
             "hit_vs_no_hit_comparison": None
         }
         
+        # Initialize top_rec outside the if block so it's accessible for updated squad
+        top_rec = None
+        
         if recommendations and len(recommendations) > 0:
             # Find best no-hit and best hit recommendations
             best_no_hit = None
@@ -749,8 +752,13 @@ class ReportGenerator:
             "bench": []
         }
         
-        if recommendations and len(recommendations) > 0 and fixtures and team_map:
-            updated_squad_df = self._apply_transfers_to_squad(current_squad, recommendations[0], players_df)
+        # Use top_rec (top_suggestion) for updated squad, not recommendations[0]
+        # top_rec is the recommendation that was selected based on the 5-point threshold rule
+        # Fallback to recommendations[0] if top_rec is None (shouldn't happen, but safety check)
+        rec_for_squad = top_rec if top_rec else (recommendations[0] if recommendations and len(recommendations) > 0 else None)
+        
+        if rec_for_squad and fixtures and team_map:
+            updated_squad_df = self._apply_transfers_to_squad(current_squad, rec_for_squad, players_df)
             starting_xi_df = self._build_starting_xi(updated_squad_df)
             starting_xi_ids = set(starting_xi_df['id'])
             bench_df = updated_squad_df[~updated_squad_df['id'].isin(starting_xi_ids)]
@@ -841,12 +849,17 @@ class ReportGenerator:
                 if 'form' not in starting_xi_df.columns:
                     starting_xi_df['form'] = 0.0
                 
+                # Convert form and fdr to numeric (handle strings)
+                starting_xi_df['form'] = pd.to_numeric(starting_xi_df['form'], errors='coerce').fillna(0.0)
+                starting_xi_df['fdr'] = pd.to_numeric(starting_xi_df['fdr'], errors='coerce').fillna(3.0)
+                starting_xi_df['EV'] = pd.to_numeric(starting_xi_df['EV'], errors='coerce').fillna(0.0)
+                
                 # Calculate captain score: EV + form bonus + FDR bonus
                 # Elite players (high form) and forwards get priority
                 starting_xi_df['captain_score'] = starting_xi_df.apply(lambda row: (
-                    to_python_type(row.get('EV', 0)) +
-                    (to_python_type(row.get('form', 0)) * 0.3) +  # Form bonus
-                    ((5.0 - to_python_type(row.get('fdr', 3.0))) * 0.5) +  # Lower FDR = easier fixture = bonus
+                    float(row.get('EV', 0)) +
+                    (float(row.get('form', 0)) * 0.3) +  # Form bonus
+                    ((5.0 - float(row.get('fdr', 3.0))) * 0.5) +  # Lower FDR = easier fixture = bonus
                     (2.0 if to_python_type(row.get('element_type', 0)) == 4 else 0)  # Forwards get +2 bonus
                 ), axis=1)
                 

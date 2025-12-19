@@ -30,7 +30,8 @@ const AppRoutes = () => {
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/live" element={<ProtectedRoute><LiveTracking /></ProtectedRoute>} />
                 <Route path="/recommendations" element={<ProtectedRoute><Recommendations /></ProtectedRoute>} />
-                <Route path="/news" element={<ProtectedRoute><News /></ProtectedRoute>} />
+                {/* News page disabled */}
+                {/* <Route path="/news" element={<ProtectedRoute><News /></ProtectedRoute>} /> */}
                 <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>

@@ -84,26 +84,42 @@ const supabaseClient = axios.create({
 
 export const entryApi = {
   getEntry: async (entryId: number): Promise<EntryInfo> => {
+    // ByteHosty server as primary backend
+    const bytehostyUrl = 'http://198.23.185.233:8080';
+    
     try {
-      const response = await renderClient.get(`/entry/${entryId}/info`);
+      // Try ByteHosty server first (primary backend)
+      const response = await axios.get(`${bytehostyUrl}/api/v1/entry/${entryId}/info`, {
+        timeout: 10000
+      });
       // Handle both direct data and StandardResponse format
       return response.data?.data || response.data;
-    } catch (error: any) {
-      console.error("Error fetching entry:", error);
+    } catch (bytehostyError: any) {
+      console.warn(`Entry API: ByteHosty failed for entry ${entryId}, trying Render fallback:`, bytehostyError.message);
       
-      // Provide more helpful error messages
-      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_RESET')) {
-        throw new Error('Cannot connect to backend server. The API may be down or unreachable.');
+      // Fallback to Render
+      try {
+        const response = await renderClient.get(`/entry/${entryId}/info`);
+        // Handle both direct data and StandardResponse format
+        return response.data?.data || response.data;
+      } catch (error: any) {
+        console.error("Error fetching entry from both backends:", error);
+        
+        // Provide more helpful error messages
+        if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_RESET') || 
+            bytehostyError.code === 'ERR_NETWORK' || bytehostyError.message?.includes('ERR_CONNECTION_RESET')) {
+          throw new Error('Cannot connect to backend server. The API may be down or unreachable.');
+        }
+        if (error.response?.status === 404) {
+          throw new Error(`Entry ID ${entryId} not found. Please check your entry ID.`);
+        }
+        if (error.response?.status === 500) {
+          throw new Error('Backend server error. Please try again later.');
+        }
+        
+        const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch entry information';
+        throw new Error(message);
       }
-      if (error.response?.status === 404) {
-        throw new Error(`Entry ID ${entryId} not found. Please check your entry ID.`);
-      }
-      if (error.response?.status === 500) {
-        throw new Error('Backend server error. Please try again later.');
-      }
-      
-      const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch entry information';
-      throw new Error(message);
     }
   },
   getCurrentGameweek: async (): Promise<number> => {
@@ -281,74 +297,107 @@ export const mlApi = {
     return { players: [] };
   },
   getMLReport: async (entryId: number, gameweek: number | undefined, fastMode: boolean = true): Promise<MLReport> => {
-    // ByteHosty server for full mode (bypasses Supabase 60s timeout)
-    // For fast mode, use Supabase edge function (faster, stays under timeout)
-    const useDirectServer = !fastMode; // Use direct ByteHosty server for full mode
+    // #region agent log
+    const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
+    const runId = `api_${Date.now()}`;
+    const logData = (location: string, message: string, data: any, hypothesisId: string) => {
+      fetch(logEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'debug-session', runId, hypothesisId, location, message, data, timestamp: Date.now() })
+      }).catch(() => {});
+    };
+    logData('api.ts:getMLReport:entry', 'getMLReport called', { entryId, gameweek, fastMode }, 'H');
+    // #endregion
     
-    if (useDirectServer) {
-      // Call ByteHosty server directly to avoid Supabase timeout for full ML analysis
-      const bytehostyUrl = 'http://198.23.185.233:8080';
-      console.log('mlApi.getMLReport: Calling ByteHosty server directly for full ML report');
-      const params: any = {
-        entry_id: entryId,
-        model_version: 'v4.6',
-        fast_mode: fastMode
-      };
-      // Only include gameweek if it's provided (backend will use current gameweek if not provided)
-      if (gameweek !== undefined && gameweek !== null) {
-        params.gameweek = gameweek;
-      }
-      try {
-        const response = await axios.get(`${bytehostyUrl}/api/v1/ml/report`, {
-          params: params,
-          timeout: 300000 // 5 minute timeout for full ML report
-        });
-        const responseData = response.data;
-        if (responseData?.data) {
-          return responseData.data;
+    // ML page ONLY uses ByteHosty server - no fallbacks
+    const bytehostyUrl = 'http://198.23.185.233:8080';
+    console.log('mlApi.getMLReport: Calling ByteHosty server (no fallbacks)');
+    const params: any = {
+      entry_id: entryId,
+      model_version: 'v4.6',
+      fast_mode: fastMode
+    };
+    // Only include gameweek if it's provided (backend will use current gameweek if not provided)
+    if (gameweek !== undefined && gameweek !== null) {
+      params.gameweek = gameweek;
+    }
+    
+    // #region agent log
+    logData('api.ts:getMLReport:before_bytehosty', 'Before ByteHosty API call', {
+      url: `${bytehostyUrl}/api/v1/ml/report`,
+      params
+    }, 'I');
+    // #endregion
+    
+    try {
+      // Add timestamp to prevent caching
+      const response = await axios.get(`${bytehostyUrl}/api/v1/ml/report`, {
+        params: {
+          ...params,
+          _t: Date.now() // Cache buster timestamp
+        },
+        timeout: 300000, // 5 minute timeout for full ML report
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
-        return responseData;
-      } catch (bytehostyError: any) {
-        console.warn('mlApi.getMLReport: ByteHosty failed, falling back to Supabase:', bytehostyError.message);
-        // Fallback to Supabase edge function
-        const params = new URLSearchParams({
-          entry_id: String(entryId),
-          model_version: 'v4.6',
-          fast_mode: String(fastMode)
-        });
-        if (gameweek !== undefined && gameweek !== null) {
-          params.append('gameweek', String(gameweek));
-        }
-        const response = await supabaseClient.get(`/ml-report?${params.toString()}`, {
-          timeout: 300000 // Extended timeout for fallback
-        });
-        const responseData = response.data;
-        if (responseData?.data) {
-          return responseData.data;
-        }
-        return responseData;
-      }
-    } else {
-      // Use Supabase edge function for fast mode (stays under 60s timeout)
-      const params = new URLSearchParams({
-        entry_id: String(entryId),
-        model_version: 'v4.6',
-        fast_mode: String(fastMode)
       });
-      // Only include gameweek if it's provided
-      if (gameweek !== undefined && gameweek !== null) {
-        params.append('gameweek', String(gameweek));
-      }
-      const response = await supabaseClient.get(`/ml-report?${params.toString()}`, {
-        timeout: 60000 // 1 minute timeout for fast mode
-      });
-      // Backend returns StandardResponse format: { data: {...}, meta: {...} }
+      
+      // #region agent log
+      logData('api.ts:getMLReport:after_bytehosty', 'After ByteHosty API call', {
+        status: response.status,
+        response_gameweek: response.data?.data?.header?.gameweek || response.data?.header?.gameweek,
+        has_data: !!response.data?.data,
+        response_keys: response.data ? Object.keys(response.data) : []
+      }, 'J');
+      // #endregion
+      
       const responseData = response.data;
+      console.log('mlApi.getMLReport: ByteHosty response structure:', {
+        has_data_key: !!responseData?.data,
+        has_header: !!responseData?.header,
+        has_data_header: !!responseData?.data?.header,
+        gameweek_in_data: responseData?.data?.header?.gameweek,
+        gameweek_in_root: responseData?.header?.gameweek,
+        response_keys: responseData ? Object.keys(responseData) : []
+      });
+      
+      // Handle both response formats: { data: {...} } and direct {...}
       if (responseData?.data) {
+        console.log('mlApi.getMLReport: Returning nested data, gameweek:', responseData.data?.header?.gameweek);
         return responseData.data;
       }
-      // Fallback: if it's already the data object
+      console.log('mlApi.getMLReport: Returning root data, gameweek:', responseData?.header?.gameweek);
       return responseData;
+    } catch (error: any) {
+      // #region agent log
+      logData('api.ts:getMLReport:bytehosty_error', 'ByteHosty error - no fallback', {
+        error_message: error.message,
+        error_status: error.response?.status,
+        error_code: error.code
+      }, 'K');
+      // #endregion
+      
+      console.error('mlApi.getMLReport: ByteHosty server error:', error.message);
+      
+      // Provide helpful error messages
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION_RESET') || error.message?.includes('ECONNREFUSED')) {
+        throw new Error('Cannot connect to ML server. The ByteHosty server may be down or unreachable.');
+      }
+      if (error.response?.status === 404) {
+        throw new Error(`Entry ID ${entryId} not found on ML server.`);
+      }
+      if (error.response?.status === 500) {
+        throw new Error('ML server error. Please try again later.');
+      }
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw new Error('ML report generation timed out. The analysis is computationally intensive. Please try again.');
+      }
+      
+      const message = error.response?.data?.detail || error.response?.data?.error || error.message || 'Failed to fetch ML report from ByteHosty server';
+      throw new Error(message);
     }
   },
   getRecommendations: async (entryId: number, gameweek: number): Promise<Recommendation[]> => {

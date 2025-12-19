@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, BarChart2, Radio, Zap, Newspaper } from 'lucide-react';
+import { Home, Radio, Zap, Newspaper } from 'lucide-react';
 
 const Dock: React.FC = () => {
   const navigate = useNavigate();
@@ -8,10 +8,9 @@ const Dock: React.FC = () => {
 
   const items = [
     { icon: Home, label: 'Home', path: '/' },
-    { icon: BarChart2, label: 'Dash', path: '/dashboard' },
-    { icon: Radio, label: 'Live', path: '/live' },
-    { icon: Zap, label: 'ML', path: '/recommendations' },
-    { icon: Newspaper, label: 'News', path: '/news' },
+    { icon: Radio, label: 'Gameweek Points Tracking', path: '/live' },
+    { icon: Zap, label: 'Team Optimization', path: '/recommendations' },
+    // { icon: Newspaper, label: 'News', path: '/news' }, // Disabled
   ];
 
   return (

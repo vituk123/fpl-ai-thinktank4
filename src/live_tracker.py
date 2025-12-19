@@ -86,12 +86,16 @@ class LiveGameweekTracker:
             
             picks = picks_data['picks']
             
-            # Check if Bench Boost chip is active for this gameweek
+            # Check if chips are active for this gameweek
             if entry_history is None:
                 entry_history = self.api_client.get_entry_history(self.entry_id, use_cache=True)
             chips_used = entry_history.get('chips', [])
             bench_boost_active = any(
                 chip.get('event') == gameweek and chip.get('name') == 'bboost' 
+                for chip in chips_used
+            )
+            triple_captain_active = any(
+                chip.get('event') == gameweek and chip.get('name') == '3xc' 
                 for chip in chips_used
             )
             
@@ -131,9 +135,10 @@ class LiveGameweekTracker:
                 player_data = live_elements.get(player_id, {})
                 base_points = player_data.get('points', 0)
                 
-                # Apply captain multiplier
+                # Apply captain multiplier (2x normal, 3x if triple captain)
                 if is_captain:
-                    points = base_points * 2
+                    captain_multiplier = 3 if triple_captain_active else 2
+                    points = base_points * captain_multiplier
                     captain_points = points
                 elif is_vice:
                     points = base_points
@@ -157,6 +162,7 @@ class LiveGameweekTracker:
                 'captain': captain_points,
                 'vice_captain': vice_captain_points,
                 'bench_boost_active': bench_boost_active,
+                'triple_captain_active': triple_captain_active,
                 'live_elements': live_elements
             }
         except Exception as e:

@@ -54,9 +54,9 @@ const MacMenuBar: React.FC = () => {
   // Menu items
   const navItems = isAuthenticated ? [
     { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Live', href: '/live' },
-    { label: 'ML', href: '/recommendations' },
-    { label: 'News', href: '/news' },
+    { label: 'Gameweek Points Tracking', href: '/live' },
+    { label: 'Team Optimization', href: '/recommendations' },
+    // { label: 'News', href: '/news' }, // Disabled
   ] : [];
 
   // Desktop view (original Mac menu bar)
@@ -74,16 +74,17 @@ const MacMenuBar: React.FC = () => {
                     <span className="font-bold text-sm">Dashboard</span>
                     <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px]">
                         <button onClick={() => navigate('/dashboard')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Overview</button>
-                        <button onClick={() => navigate('/live')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Live Tracking</button>
+                        <button onClick={() => navigate('/live')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Gameweek Points Tracking</button>
                     </div>
                 </div>
                  <div className="relative group h-full flex items-center cursor-pointer">
                     <span className="font-bold text-sm">Optimize</span>
                     <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px]">
-                        <button onClick={() => navigate('/recommendations')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Transfers</button>
+                        <button onClick={() => navigate('/recommendations')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Team Optimization</button>
                     </div>
                 </div>
-                <button onClick={() => navigate('/news')} className="font-bold text-sm hover:underline decoration-2">News</button>
+                {/* News button disabled */}
+                {false && <button onClick={() => navigate('/news')} className="font-bold text-sm hover:underline decoration-2">News</button>}
             </nav>
         )}
       </div>

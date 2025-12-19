@@ -250,7 +250,8 @@ const Dashboard: React.FC = () => {
         )}
       </DesktopWindow>
 
-      {/* Transfer Analysis Section */}
+      {/* Transfer Analysis Section - DISABLED */}
+      {false && (
       <DesktopWindow title="Transfer Analysis" className="col-span-1 md:col-span-2">
         {transferData?.data?.transfers && Array.isArray(transferData.data.transfers) && transferData.data.transfers.length > 0 ? (
           <div className="overflow-x-auto">
@@ -291,8 +292,10 @@ const Dashboard: React.FC = () => {
           <div className="font-mono text-xs opacity-50 text-center py-4">NO DATA AVAILABLE</div>
         )}
       </DesktopWindow>
+      )}
 
-      {/* Ownership vs Points Correlation Section */}
+      {/* Ownership vs Points Correlation Section - DISABLED */}
+      {false && (
       <DesktopWindow title="Ownership vs Points Correlation" className="col-span-1 md:col-span-2">
         {ownershipData?.data?.players && ownershipData.data.players.length > 0 ? (
           <div className="space-y-3">
@@ -331,6 +334,7 @@ const Dashboard: React.FC = () => {
           <div className="font-mono text-xs opacity-50 text-center py-4">NO DATA AVAILABLE</div>
         )}
       </DesktopWindow>
+      )}
 
     </div>
   );

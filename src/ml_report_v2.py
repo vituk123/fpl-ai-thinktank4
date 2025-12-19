@@ -12,6 +12,15 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Create a session with proper SSL configuration
+def create_requests_session():
+    """Create a requests session with proper SSL configuration"""
+    session = requests.Session()
+    # On Windows, use system certificate store (verify=True uses Windows cert store)
+    # This avoids the certifi path issue on Windows
+    session.verify = True
+    return session
+
 # CRITICAL: Blocked players that should NEVER appear
 BLOCKED_PLAYER_IDS = {5, 241}  # Gabriel, Caicedo
 
@@ -63,7 +72,9 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
     # #endregion
     
     try:
-        response = requests.get(url, timeout=10)
+        # Use session with proper SSL configuration
+        session = create_requests_session()
+        response = session.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
             picks = data.get('picks', [])
@@ -95,7 +106,9 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
 def determine_gameweek(entry_id: int) -> int:
     """Determine current gameweek from FPL API - prioritize latest finished gameweek"""
     try:
-        response = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
+        # Use session with proper SSL configuration
+        session = create_requests_session()
+        response = session.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
         if response.status_code == 200:
             data = response.json()
             events = data.get('events', [])
@@ -170,7 +183,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     
     # Step 3: Get bootstrap data
     try:
-        response = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
+        session = create_requests_session()
+        response = session.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
         if response.status_code == 200:
             bootstrap = response.json()
         else:
@@ -247,7 +261,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         available_players = players_df[~players_df['id'].isin(player_ids)].copy()
         
         # Get entry info
-        entry_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/", timeout=10)
+        session = create_requests_session()
+        entry_response = session.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/", timeout=10)
         if entry_response.status_code == 200:
             entry_info = entry_response.json()
             bank = entry_info.get('last_deadline_bank', 0) / 10.0
@@ -256,7 +271,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             # SPECIAL CASE: Before GW15, all FPL accounts were given 5 free transfers
             # For GW15+, calculate based on actual usage
             try:
-                history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
+                session = create_requests_session()
+                history_response = session.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
                 if history_response.status_code == 200:
                     history = history_response.json()
                     # Check the CURRENT gameweek's transfers (not previous) to calculate free transfers for NEXT gameweek
@@ -387,7 +403,8 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         # Get fixtures for updated squad display
         fixtures = []
         try:
-            fixtures_response = requests.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
+            session = create_requests_session()
+            fixtures_response = session.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
             if fixtures_response.status_code == 200:
                 fixtures = fixtures_response.json()
                 debug_log("ml_report_v2.py:generate_ml_report_v2:step7", f"Fetched fixtures", {"count": len(fixtures)}, "H2")
