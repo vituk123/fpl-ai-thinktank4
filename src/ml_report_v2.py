@@ -142,8 +142,11 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     gameweek = determine_gameweek(entry_id)
     
     # #region agent log
-    debug_log("ml_report_v2.py:generate_ml_report_v2:step1", f"Using gameweek", {"gameweek": gameweek}, "H2")
+    debug_log("ml_report_v2.py:generate_ml_report_v2:step1", f"Using gameweek", {"gameweek": gameweek, "entry_id": entry_id}, "H2")
     # #endregion
+    
+    # CRITICAL: Log the gameweek that will be used in the report
+    logger.info(f"ML Report V2: Determined gameweek {gameweek} for entry {entry_id}")
     
     # Step 2: Get picks DIRECTLY from FPL API
     picks = get_fpl_picks_direct(entry_id, gameweek)
@@ -383,10 +386,17 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         
         # Generate report data
         report_gen = ReportGenerator(config)
+        logger.info(f"ML Report V2: Generating report data with gameweek {gameweek}")
         report_data = report_gen.generate_report_data(
             entry_info, gameweek, current_squad, filtered_recommendations,
             chip_evals, players_df, None, team_map, bootstrap
         )
+        
+        # CRITICAL: Verify gameweek in report_data
+        if 'header' in report_data and 'gameweek' in report_data['header']:
+            logger.info(f"ML Report V2: Report data header gameweek = {report_data['header']['gameweek']}")
+        else:
+            logger.warning(f"ML Report V2: Report data missing header.gameweek! Keys: {list(report_data.keys())}")
         
         # #region agent log
         if 'transfer_recommendations' in report_data:
