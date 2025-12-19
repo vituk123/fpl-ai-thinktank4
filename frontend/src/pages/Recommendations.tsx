@@ -248,10 +248,13 @@ const Recommendations: React.FC = () => {
                   </div>
                 )}
                 
-                {report.transfer_recommendations.hit_vs_no_hit_comparison.difference !== null && (
+                {report.transfer_recommendations.hit_vs_no_hit_comparison.difference !== null && 
+                 report.transfer_recommendations.hit_vs_no_hit_comparison.difference !== 0 && (
                   <div className="mt-3 p-2 bg-white border border-gray-300 rounded">
                     <p className="text-xs font-bold">
-                      Difference: <span className="font-mono text-green-600">+{report.transfer_recommendations.hit_vs_no_hit_comparison.difference.toFixed(2)} points</span> in favor of {report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' ? 'hit transfer' : 'no-hit transfer'}
+                      Difference: <span className={`font-mono ${report.transfer_recommendations.hit_vs_no_hit_comparison.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {report.transfer_recommendations.hit_vs_no_hit_comparison.difference > 0 ? '+' : ''}{report.transfer_recommendations.hit_vs_no_hit_comparison.difference.toFixed(2)} points
+                      </span> in favor of {report.transfer_recommendations.hit_vs_no_hit_comparison.better_option === 'hit' ? 'hit transfer' : 'no-hit transfer'}
                     </p>
                   </div>
                 )}
