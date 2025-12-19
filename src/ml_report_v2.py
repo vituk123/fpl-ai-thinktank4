@@ -346,8 +346,30 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             filtered_recommendations.append(rec)
         
         # Generate chip evaluations
+        # Get chips used from entry history
+        try:
+            history_response = requests.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/history/", timeout=10)
+            if history_response.status_code == 200:
+                entry_history = history_response.json()
+                chips_used = entry_history.get('chips', [])
+                chips_used_names = {chip.get('name') for chip in chips_used}
+                
+                # All possible chips
+                all_chips = ['bboost', '3xc', 'freehit', 'wildcard']
+                # Available chips = all chips minus used chips
+                avail_chips = [chip for chip in all_chips if chip not in chips_used_names]
+                
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step6", f"Chip availability", {"chips_used": list(chips_used_names), "chips_available": avail_chips}, "H2")
+            else:
+                # Fallback: assume all chips available
+                avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step6", f"Failed to get history, assuming all chips available", {}, "H2")
+        except Exception as e:
+            # Fallback: assume all chips available
+            avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step6", f"Error getting chips, assuming all available", {"error": str(e)}, "H2")
+        
         chip_eval = ChipEvaluator(config)
-        avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']
         chip_evals = chip_eval.evaluate_all_chips(
             current_squad, players_df, gameweek, avail_chips, bank, filtered_recommendations
         )
