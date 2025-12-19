@@ -607,7 +607,7 @@ const Recommendations: React.FC = () => {
               </p>
               {Object.entries(report.chip_recommendation.evaluations).length > 0 && (
                 <ul className="list-disc list-inside space-y-1 text-sm mt-2">
-                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]) => (
+                  {Object.entries(report.chip_recommendation.evaluations).map(([chipName, evaluation]: [string, { recommend: boolean; ev_gain: number; reason: string }]) => (
                     <li key={chipName}>
                       <strong>{chipName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {evaluation.reason}
                     </li>
