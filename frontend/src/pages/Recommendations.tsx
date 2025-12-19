@@ -25,6 +25,8 @@ const Recommendations: React.FC = () => {
         // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
         const data = await mlApi.getMLReport(entryId, undefined, false);
         console.log('ML Report: Received data:', data);
+        console.log('ML Report: Header gameweek from API:', data?.header?.gameweek);
+        console.log('ML Report: Full header:', data?.header);
         // Debug: Log transfer recommendations data
         if (data?.transfer_recommendations?.top_suggestion) {
           const topSug = data.transfer_recommendations.top_suggestion;
