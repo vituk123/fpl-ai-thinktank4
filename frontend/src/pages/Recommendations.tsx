@@ -19,14 +19,24 @@ const Recommendations: React.FC = () => {
         return;
       }
       try {
-        console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
-        // Always pass undefined so backend uses its own current gameweek logic (latest played gameweek)
-        // The ML system correctly determines the latest played gameweek based on data availability
-        // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
+        // CRITICAL: Always pass undefined for gameweek so backend uses its own logic (latest finished gameweek)
+        // Add cache-busting timestamp to prevent browser/axios caching
+        const cacheBuster = `?t=${Date.now()}`;
+        console.log('ML Report: Fetching for entryId:', entryId, 'with cache-busting');
+        
+        // Use fast_mode=false to get full ML analysis
         const data = await mlApi.getMLReport(entryId, undefined, false);
+        
         console.log('ML Report: Received data:', data);
         console.log('ML Report: Header gameweek from API:', data?.header?.gameweek);
         console.log('ML Report: Full header:', data?.header);
+        
+        // CRITICAL: Verify gameweek is present and valid
+        if (!data?.header?.gameweek) {
+          console.error('ML Report: ERROR - No gameweek in response header!', data);
+          throw new Error('Invalid response: missing gameweek');
+        }
+        
         // Debug: Log transfer recommendations data
         if (data?.transfer_recommendations?.top_suggestion) {
           const topSug = data.transfer_recommendations.top_suggestion;
@@ -41,14 +51,12 @@ const Recommendations: React.FC = () => {
             });
           }
         }
+        
+        // CRITICAL: Set report data - this is the source of truth for gameweek display
         setReport(data);
         setError(null);
         
-        // Update currentGameweek from the ML report response (this is the actual gameweek analyzed)
-        if (data?.header?.gameweek) {
-          console.log('ML Report: Updating currentGameweek from report:', data.header.gameweek);
-          // Note: We can't directly update context here, but the report will display the correct gameweek
-        }
+        console.log('ML Report: Set report with gameweek:', data.header.gameweek);
       } catch (e: any) {
         console.error('ML Report: Error fetching:', e);
         // Check if it's a timeout error
@@ -63,7 +71,9 @@ const Recommendations: React.FC = () => {
       }
     };
     fetchReport();
-  }, [entryId, currentGameweek]);
+    // CRITICAL: Only depend on entryId, NOT currentGameweek (which may be stale)
+    // The backend determines the correct gameweek, and we display it from the report
+  }, [entryId]);
 
   if (!entryId) {
     return (
