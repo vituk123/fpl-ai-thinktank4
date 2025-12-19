@@ -93,28 +93,35 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
         return []
 
 def determine_gameweek(entry_id: int) -> int:
-    """Determine current gameweek from FPL API"""
+    """Determine current gameweek from FPL API - prioritize latest finished gameweek"""
     try:
         response = requests.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
         if response.status_code == 200:
             data = response.json()
             events = data.get('events', [])
             
-            # Find current event
-            current_event = next((e for e in events if e.get('is_current', False)), None)
-            if current_event:
-                initial_gw = current_event.get('id', 1)
+            # Priority 1: Latest finished gameweek (most recent completed)
+            finished = [e for e in events if e.get('finished', False)]
+            if finished:
+                latest_finished = max(finished, key=lambda x: x.get('id', 0))
+                initial_gw = latest_finished.get('id', 1)
+                debug_log("ml_report_v2.py:determine_gameweek", f"Using latest finished gameweek", {"gameweek": initial_gw, "finished": latest_finished.get('finished', False)}, "H1")
             else:
-                # Fallback to latest finished
-                finished = [e for e in events if e.get('finished', False)]
-                if finished:
-                    initial_gw = max(finished, key=lambda x: x.get('id', 0)).get('id', 1)
+                # Priority 2: Current event (if no finished events)
+                current_event = next((e for e in events if e.get('is_current', False)), None)
+                if current_event:
+                    initial_gw = current_event.get('id', 1)
+                    debug_log("ml_report_v2.py:determine_gameweek", f"Using current event", {"gameweek": initial_gw}, "H1")
                 else:
-                    initial_gw = 16
-            
-            # #region agent log
-            debug_log("ml_report_v2.py:determine_gameweek", f"Determined gameweek", {"gameweek": initial_gw}, "H1")
-            # #endregion
+                    # Priority 3: Next event
+                    next_event = next((e for e in events if e.get('is_next', False)), None)
+                    if next_event:
+                        initial_gw = next_event.get('id', 1)
+                        debug_log("ml_report_v2.py:determine_gameweek", f"Using next event", {"gameweek": initial_gw}, "H1")
+                    else:
+                        # Fallback: max event ID
+                        initial_gw = max((e.get('id', 1) for e in events), default=16)
+                        debug_log("ml_report_v2.py:determine_gameweek", f"Using max event ID", {"gameweek": initial_gw}, "H1")
             
             return initial_gw
     except Exception as e:
