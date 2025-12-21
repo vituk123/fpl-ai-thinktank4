@@ -223,14 +223,9 @@ export const teamSearchApi = {
       const matches = response.data?.data?.matches || response.data?.matches || [];
       return matches;
     } catch (error: any) {
-      // Server search failed - don't use Supabase fallback as it's broken (500 errors)
-      // Silently return empty array to prevent error spam in console
-      // Only log non-network errors for debugging
-      if (error.response?.status && error.response.status !== 404 && error.code !== 'ERR_NETWORK' && !error.message?.includes('ERR_CONNECTION')) {
-        console.debug('Team search: Server search unavailable', error.response.status);
-      }
-      
-      // Return empty array on error (don't throw - let UI handle gracefully)
+      // Server search failed - silently return empty array
+      // Don't log errors to prevent console spam (server endpoint may be unavailable)
+      // Return empty array on any error to let UI handle gracefully
       return [];
     }
   }
