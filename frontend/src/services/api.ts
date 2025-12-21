@@ -226,10 +226,16 @@ export const teamSearchApi = {
       const matches = response.data?.data?.matches || response.data?.matches || [];
       return matches;
     } catch (error: any) {
-      // Server search failed - silently return empty array
-      // Don't log errors to prevent console spam (server endpoint may be unavailable)
-      // Return empty array on any error to let UI handle gracefully
-      return [];
+      // Server search failed - try Supabase fallback if available
+      try {
+        const response = await supabaseClient.get(`/search-teams?q=${encodeURIComponent(query.trim())}`, {
+          timeout: 10000
+        });
+        return response.data?.matches || [];
+      } catch (fallbackError: any) {
+        // Both server and Supabase failed - silently return empty array
+        return [];
+      }
     }
   }
 };
