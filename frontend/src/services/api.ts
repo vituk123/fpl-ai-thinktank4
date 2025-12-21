@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { EntryInfo, NewsArticle, Prediction, Recommendation, MLReport } from '../types';
+import { EntryInfo, NewsArticle, Prediction, Recommendation, MLReport, TeamSearchResult } from '../types';
 
 // Production Fallback Configuration
 // These values are used if import.meta.env is not available (e.g. in browser preview)
@@ -82,14 +82,71 @@ const supabaseClient = axios.create({
   },
 });
 
+// Helper function to get proxy URL for ByteHosty (when on HTTPS)
+const getByteHostyProxyUrl = (path: string): string => {
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    // Use Vercel proxy when on HTTPS
+    // Map specific paths to their proxy endpoints
+    if (path === 'ml/report') {
+      return '/api/proxy/ml/report';
+    }
+    // For other paths, use the catch-all (if it works) or create specific routes
+    return `/api/proxy/${path}`;
+  }
+  // Direct connection when on HTTP (local dev)
+  return `http://198.23.185.233:8080/api/v1/${path}`;
+};
+
+// Helper function to call dashboard endpoints with ByteHosty primary and Render fallback
+const callDashboardEndpoint = async (endpoint: string, params?: Record<string, any>) => {
+  const queryString = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : '';
+  
+  // Always try ByteHosty first (via proxy on HTTPS, direct on HTTP)
+  try {
+    // Remove leading slash from endpoint if present
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+    const url = getByteHostyProxyUrl(cleanEndpoint) + queryString;
+    const response = await axios.get(url, {
+      timeout: 30000 // 30 second timeout (increased for slow database queries)
+    });
+    return response.data;
+  } catch (bytehostyError: any) {
+    console.warn(`Dashboard API: ByteHosty failed for ${endpoint}, trying Render fallback:`, bytehostyError.message);
+    
+    // Fallback to Render
+    try {
+      const response = await renderClient.get(`${endpoint}${queryString}`, {
+        timeout: 30000 // 30 second timeout
+      });
+      return response.data;
+    } catch (renderError: any) {
+      console.error(`Dashboard API: Both ByteHosty and Render failed for ${endpoint}:`, {
+        renderError: renderError.message,
+        renderStatus: renderError.response?.status
+      });
+      // Return empty data structure instead of throwing to prevent UI breakage
+      // This allows components to render with "NO DATA AVAILABLE" messages
+      if (endpoint.includes('ownership-correlation')) {
+        return { data: { players: [], correlation_coefficient: null } };
+      } else if (endpoint.includes('captain-performance')) {
+        return { data: { captains: [] } };
+      } else if (endpoint.includes('transfer-analysis')) {
+        return { data: { transfers: [] } };
+      } else if (endpoint.includes('rank-progression')) {
+        return { data: { gameweeks: [], overall_rank: [] } };
+      }
+      // Generic fallback
+      return { data: {} };
+    }
+  }
+};
+
 export const entryApi = {
   getEntry: async (entryId: number): Promise<EntryInfo> => {
-    // ByteHosty server as primary backend
-    const bytehostyUrl = 'http://198.23.185.233:8080';
-    
+    // Always try ByteHosty first (via proxy on HTTPS, direct on HTTP)
     try {
-      // Try ByteHosty server first (primary backend)
-      const response = await axios.get(`${bytehostyUrl}/api/v1/entry/${entryId}/info`, {
+      const url = getByteHostyProxyUrl(`entry/${entryId}/info`);
+      const response = await axios.get(url, {
         timeout: 10000
       });
       // Handle both direct data and StandardResponse format
@@ -123,10 +180,10 @@ export const entryApi = {
     }
   },
   getCurrentGameweek: async (): Promise<number> => {
-    // ByteHosty server as primary backend
-    const bytehostyUrl = 'http://198.23.185.233:8080';
+    // Always try ByteHosty first (via proxy on HTTPS, direct on HTTP)
     try {
-      const response = await axios.get(`${bytehostyUrl}/api/v1/gameweek/current`, {
+      const url = getByteHostyProxyUrl('gameweek/current');
+      const response = await axios.get(url, {
         timeout: 10000
       });
       if (response.data?.data?.gameweek) {
@@ -148,44 +205,55 @@ export const entryApi = {
   },
 };
 
-// Helper function to call dashboard endpoints with ByteHosty primary and Render fallback
-const callDashboardEndpoint = async (endpoint: string, params?: Record<string, any>) => {
-  const bytehostyUrl = 'http://198.23.185.233:8080';
-  const queryString = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : '';
-  
-  try {
-    // Try ByteHosty server first (primary backend)
-    const response = await axios.get(`${bytehostyUrl}/api/v1${endpoint}${queryString}`, {
-      timeout: 30000 // 30 second timeout (increased for slow database queries)
-    });
-    return response.data;
-  } catch (bytehostyError: any) {
-    console.warn(`Dashboard API: ByteHosty failed for ${endpoint}, trying Render fallback:`, bytehostyError.message);
-    // Fallback to Render
+export const teamSearchApi = {
+  searchTeams: async (query: string): Promise<TeamSearchResult[]> => {
+    if (!query || query.trim().length === 0) {
+      return [];
+    }
+
     try {
-      const response = await renderClient.get(`${endpoint}${queryString}`, {
-        timeout: 30000 // 30 second timeout
+      // Use ByteHosty server for team search (CSV file is stored on server)
+      // The endpoint is /api/v1/search/teams on the server
+      const url = getByteHostyProxyUrl(`search/teams?q=${encodeURIComponent(query.trim())}&limit=20`);
+      const response = await axios.get(url, {
+        timeout: 10000
       });
-      return response.data;
-    } catch (renderError: any) {
-      console.error(`Dashboard API: Both ByteHosty and Render failed for ${endpoint}:`, {
-        bytehostyError: bytehostyError.message,
-        renderError: renderError.message,
-        renderStatus: renderError.response?.status
-      });
-      // Return empty data structure instead of throwing to prevent UI breakage
-      // This allows components to render with "NO DATA AVAILABLE" messages
-      if (endpoint.includes('ownership-correlation')) {
-        return { data: { players: [], correlation_coefficient: null } };
-      } else if (endpoint.includes('captain-performance')) {
-        return { data: { captains: [] } };
-      } else if (endpoint.includes('transfer-analysis')) {
-        return { data: { transfers: [] } };
-      } else if (endpoint.includes('rank-progression')) {
-        return { data: { gameweeks: [], overall_rank: [] } };
+      
+      // Handle StandardResponse format: { data: { matches: TeamSearchResult[] }, meta: {...} }
+      const matches = response.data?.data?.matches || response.data?.matches || [];
+      return matches;
+    } catch (error: any) {
+      console.error('Error searching teams:', error);
+      
+      // Fallback to Supabase if server search fails (suppress errors if Supabase also fails)
+      try {
+        console.warn('Team search: Server search failed, trying Supabase fallback');
+        const response = await supabaseClient.get(`/search-teams?q=${encodeURIComponent(query.trim())}`, {
+          timeout: 10000
+        });
+        return response.data?.matches || [];
+      } catch (fallbackError: any) {
+        // Silently fail - Supabase endpoint is known to have issues
+        // Don't log error to console to prevent error spam
+        if (fallbackError.response?.status !== 500) {
+          console.warn('Team search: Supabase fallback also failed');
+        }
       }
-      // Generic fallback
-      return { data: {} };
+      
+      // Return empty array on error (don't throw - let UI handle gracefully)
+      if (error.response?.status === 400) {
+        // Invalid query - return empty
+        return [];
+      }
+      
+      // Log but don't throw for network errors
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION')) {
+        console.warn('Team search: Network error, returning empty results');
+        return [];
+      }
+      
+      // For other errors, return empty array
+      return [];
     }
   }
 };
@@ -273,7 +341,7 @@ export const liveApi = {
 
 export const mlApi = {
   getPredictions: async (gameweek: number, entryId: number): Promise<Prediction[]> => {
-    const response = await renderClient.get(`/ml/predictions?gameweek=${gameweek}&entry_id=${entryId}&model_version=v4.6`);
+    const response = await renderClient.get(`/ml/predictions?gameweek=${gameweek}&entry_id=${entryId}&model_version=v5.0`);
     return response.data;
   },
   getMLPlayers: async (gameweek: number, entryId?: number): Promise<any> => {
@@ -281,7 +349,7 @@ export const mlApi = {
       throw new Error('entry_id is required for ML players');
     }
     // Use Supabase edge function proxy (consistent with other ML endpoints)
-    const response = await supabaseClient.get(`/ml-players?entry_id=${entryId}&gameweek=${gameweek}&model_version=v4.6&limit=500`, {
+    const response = await supabaseClient.get(`/ml-players?entry_id=${entryId}&gameweek=${gameweek}&model_version=v5.0&limit=500`, {
       timeout: 120000 // 2 minute timeout for ML processing
     });
     // Backend returns StandardResponse format: { data: { players: [...] }, meta: {...} }
@@ -310,12 +378,12 @@ export const mlApi = {
     logData('api.ts:getMLReport:entry', 'getMLReport called', { entryId, gameweek, fastMode }, 'H');
     // #endregion
     
-    // ML page ONLY uses ByteHosty server - no fallbacks
-    const bytehostyUrl = 'http://198.23.185.233:8080';
-    console.log('mlApi.getMLReport: Calling ByteHosty server (no fallbacks)');
+    // Always use ByteHosty (via proxy on HTTPS, direct on HTTP)
+    console.log('mlApi.getMLReport: Calling ByteHosty server via proxy');
+    
     const params: any = {
       entry_id: entryId,
-      model_version: 'v4.6',
+      model_version: 'v5.0',
       fast_mode: fastMode
     };
     // Only include gameweek if it's provided (backend will use current gameweek if not provided)
@@ -325,14 +393,15 @@ export const mlApi = {
     
     // #region agent log
     logData('api.ts:getMLReport:before_bytehosty', 'Before ByteHosty API call', {
-      url: `${bytehostyUrl}/api/v1/ml/report`,
+      url: getByteHostyProxyUrl('ml/report'),
       params
     }, 'I');
     // #endregion
     
     try {
-      // Add timestamp to prevent caching
-      const response = await axios.get(`${bytehostyUrl}/api/v1/ml/report`, {
+      // Use proxy URL (automatically handles HTTPS/HTTP)
+      const url = getByteHostyProxyUrl('ml/report');
+      const response = await axios.get(url, {
         params: {
           ...params,
           _t: Date.now() // Cache buster timestamp
@@ -373,7 +442,7 @@ export const mlApi = {
       return responseData;
     } catch (error: any) {
       // #region agent log
-      logData('api.ts:getMLReport:bytehosty_error', 'ByteHosty error - no fallback', {
+      logData('api.ts:getMLReport:bytehosty_error', 'ByteHosty error', {
         error_message: error.message,
         error_status: error.response?.status,
         error_code: error.code
@@ -452,21 +521,22 @@ export const imagesApi = {
   getPlayerImageUrl: (playerId: number | string | null | undefined) => {
     // Validate inputs
     if (!playerId || playerId === 0) {
-      // Return a placeholder or fallback URL
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+      // Return placeholder instead of FPL URL (domain appears to be down)
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
     // Ensure playerId is a number
     const id = typeof playerId === 'string' ? parseInt(playerId, 10) : playerId;
     if (isNaN(id) || id <= 0) {
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
     // Ensure SUPABASE_URL is defined and valid
     const baseUrl = SUPABASE_URL?.trim();
     if (!baseUrl || baseUrl === 'undefined' || baseUrl === 'null' || !baseUrl.startsWith('http')) {
-      console.warn('[imagesApi] SUPABASE_URL is invalid, using FPL fallback for player', id, 'SUPABASE_URL:', SUPABASE_URL);
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
+      console.warn('[imagesApi] SUPABASE_URL is invalid, using placeholder for player', id);
+      // Return placeholder instead of FPL URL (domain appears to be down - ERR_NAME_NOT_RESOLVED)
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
     // Supabase get_public_url adds a query parameter, but it's optional for public buckets
@@ -477,7 +547,8 @@ export const imagesApi = {
     // Validate the final URL is absolute
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       console.error('[imagesApi] Generated invalid URL (not absolute):', url, 'for player', id);
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
+      // Return placeholder instead of FPL URL
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
     // Debug logging in development
@@ -491,20 +562,25 @@ export const imagesApi = {
   getPlayerImageUrlFPL: (playerId: number | string | null | undefined) => {
     // Validate inputs
     if (!playerId || playerId === 0) {
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+      // Return a data URI placeholder instead of trying FPL domain which may be down
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
     // Ensure playerId is a number
     const id = typeof playerId === 'string' ? parseInt(playerId, 10) : playerId;
     if (isNaN(id) || id <= 0) {
-      return `https://resources.fantasy.premierleague.com/drf/element_photos/0.png`;
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
     }
     
+    // Try FPL URL, but the domain appears to be down (ERR_NAME_NOT_RESOLVED)
+    // Return placeholder instead to prevent infinite error loops
+    // If FPL images become available again, we can revert this
     const url = `https://resources.fantasy.premierleague.com/drf/element_photos/${id}.png`;
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      console.log(`[imagesApi] Generated FPL URL for player ${id}:`, url);
+      console.log(`[imagesApi] Generated FPL URL for player ${id}:`, url, '(Note: FPL domain appears to be down)');
     }
-    return url;
+    // Return placeholder instead of failing URL to prevent error spam
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
   },
   getTeamImageUrl: (teamId: number) => `${API_BASE_URL}/images/teams/${teamId}`,
 };

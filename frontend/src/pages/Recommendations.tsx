@@ -444,17 +444,18 @@ const Recommendations: React.FC = () => {
                             className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
                             onError={(e) => {
                               const img = e.target as HTMLImageElement;
+                              // Prevent infinite error loop - if we've already tried fallback, use placeholder
+                              if (img.src.includes('data:image')) {
+                                return; // Already using placeholder
+                              }
                               console.warn('[Recommendations] Image load error for player OUT:', {
                                 playerId: playerOut.id,
                                 playerName: playerOut.name,
                                 failedUrl: img.src,
                                 playerData: playerOut
                               });
-                              if (playerOut.id) {
-                                const fallbackUrl = imagesApi.getPlayerImageUrlFPL(playerOut.id);
-                                console.log('[Recommendations] Trying FPL fallback URL:', fallbackUrl);
-                                img.src = fallbackUrl;
-                              }
+                              // Use placeholder instead of trying same URL again
+                              img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
                             }}
                             onLoad={() => {
                               console.log('[Recommendations] Image loaded successfully for player OUT:', playerOut.id, playerOut.name);
@@ -507,17 +508,18 @@ const Recommendations: React.FC = () => {
                             className="w-14 h-14 object-cover object-top border-2 border-retro-primary flex-shrink-0"
                             onError={(e) => {
                               const img = e.target as HTMLImageElement;
+                              // Prevent infinite error loop - if we've already tried fallback, use placeholder
+                              if (img.src.includes('data:image')) {
+                                return; // Already using placeholder
+                              }
                               console.warn('[Recommendations] Image load error for player IN:', {
                                 playerId: playerIn.id,
                                 playerName: playerIn.name,
                                 failedUrl: img.src,
                                 playerData: playerIn
                               });
-                              if (playerIn.id) {
-                                const fallbackUrl = imagesApi.getPlayerImageUrlFPL(playerIn.id);
-                                console.log('[Recommendations] Trying FPL fallback URL:', fallbackUrl);
-                                img.src = fallbackUrl;
-                              }
+                              // Use placeholder instead of trying same URL again
+                              img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RkZCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5QbGF5ZXI8L3RleHQ+PC9zdmc+';
                             }}
                             onLoad={() => {
                               console.log('[Recommendations] Image loaded successfully for player IN:', playerIn.id, playerIn.name);
