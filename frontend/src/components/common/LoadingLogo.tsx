@@ -14,53 +14,47 @@ const LoadingLogo: React.FC<LoadingLogoProps> = ({
   const [currentPhase, setCurrentPhase] = useState<string>(phases.length > 0 ? phases[0].message : text);
   const textRef = useRef<HTMLDivElement>(null);
   const splitInstanceRef = useRef<GSAPSplitText | null>(null);
+  const spinnerRef = useRef<HTMLDivElement>(null);
+  const phaseIndexRef = useRef<number>(0);
+
+  // Animate circular spinner
+  useEffect(() => {
+    if (!spinnerRef.current) return;
+
+    const spinner = spinnerRef.current;
+    gsap.to(spinner, {
+      rotation: 360,
+      duration: 1,
+      ease: "none",
+      repeat: -1,
+    });
+
+    return () => {
+      gsap.killTweensOf(spinner);
+    };
+  }, []);
 
   useEffect(() => {
     if (phases.length === 0) {
       setCurrentPhase(text);
+      phaseIndexRef.current = 0;
       return;
     }
 
     // Initialize with first phase
+    phaseIndexRef.current = 0;
     setCurrentPhase(phases[0].message);
 
-    // Phase-based message updates
-    const startTime = Date.now();
-    let totalDuration = phases.reduce((sum, phase) => sum + phase.duration, 0);
+    // Phase-based message updates - change every 1.5 seconds, loop continuously
+    const intervalId = setInterval(() => {
+      phaseIndexRef.current = (phaseIndexRef.current + 1) % phases.length; // Loop back to start
+      setCurrentPhase(phases[phaseIndexRef.current].message);
+    }, 1500); // Change every 1.5 seconds
     
-    const updatePhase = () => {
-      const elapsed = Date.now() - startTime;
-      
-      // Determine current phase based on elapsed time
-      let cumulativeTime = 0;
-      let currentPhaseIdx = 0;
-      for (let i = 0; i < phases.length; i++) {
-        cumulativeTime += phases[i].duration;
-        if (elapsed < cumulativeTime) {
-          currentPhaseIdx = i;
-          break;
-        }
-        if (i === phases.length - 1) {
-          currentPhaseIdx = i;
-        }
-      }
-      
-      const newPhase = phases[currentPhaseIdx].message;
-      if (newPhase !== currentPhase) {
-        setCurrentPhase(newPhase);
-      }
-      
-      if (elapsed < totalDuration) {
-        requestAnimationFrame(updatePhase);
-      }
-    };
-    
-    const animationId = requestAnimationFrame(updatePhase);
-    
-    return () => cancelAnimationFrame(animationId);
-  }, [phases]);
+    return () => clearInterval(intervalId);
+  }, [phases, text]);
 
-  // Animate text when phase changes
+  // Animate text when phase changes - new animation style
   useEffect(() => {
     if (!textRef.current) return;
 
@@ -78,13 +72,18 @@ const LoadingLogo: React.FC<LoadingLogoProps> = ({
 
       splitInstanceRef.current = split;
 
-      // Animate characters
+      // New animation: fade in with scale and rotation
       gsap.from(split.chars, {
         opacity: 0,
-        y: 20,
-        duration: 0.5,
-        ease: "power3.out",
-        stagger: 0.02,
+        scale: 0,
+        rotation: -180,
+        y: 30,
+        duration: 0.6,
+        ease: "back.out(1.7)",
+        stagger: {
+          amount: 0.3,
+          from: "center"
+        },
       });
     }, 50);
 
@@ -107,11 +106,17 @@ const LoadingLogo: React.FC<LoadingLogoProps> = ({
         />
       </div>
 
-      {/* Loading Text and Phase Message - Close to logo */}
-      <div className="text-center max-w-md mt-2 space-y-1">
-        <p className="font-bold text-retro-primary uppercase tracking-wider text-lg">
-          Loading...
-        </p>
+      {/* Loading Spinner and Phase Message - Close to logo */}
+      <div className="text-center max-w-md mt-2 space-y-2">
+        {/* Animated Circular Loading Icon */}
+        <div className="flex items-center justify-center">
+          <div
+            ref={spinnerRef}
+            className="w-8 h-8 border-4 border-retro-primary border-t-transparent rounded-full"
+            style={{ borderWidth: '4px' }}
+          />
+        </div>
+        {/* Phase Message */}
         <div
           ref={textRef}
           className="font-bold text-retro-primary uppercase tracking-wider text-lg"

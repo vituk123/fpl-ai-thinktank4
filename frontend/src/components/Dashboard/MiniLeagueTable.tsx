@@ -104,7 +104,6 @@ const MiniLeagueTable: React.FC = () => {
       <div className="space-y-4">
         {/* League Selector */}
         <div className="flex items-center gap-4">
-          <label className="text-xs font-bold uppercase">Select League:</label>
           {loadingLeagues ? (
             <span className="text-xs font-mono opacity-60">Loading leagues...</span>
           ) : leagues.length === 0 ? (
@@ -113,13 +112,16 @@ const MiniLeagueTable: React.FC = () => {
             <select
               value={selectedLeagueId || ''}
               onChange={(e) => setSelectedLeagueId(Number(e.target.value))}
-              className="flex-1 max-w-md p-2 border-retro border-retro-primary bg-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-retro-primary shadow-[2px_2px_0_rgba(0,0,0,0.1)]"
+              className="p-1.5 border-retro border-retro-primary bg-white font-mono text-xs focus:outline-none focus:ring-2 focus:ring-retro-primary shadow-[2px_2px_0_rgba(0,0,0,0.1)]"
               style={{
                 appearance: 'none',
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231D1D1B' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
                 backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 8px center',
-                paddingRight: '32px'
+                backgroundPosition: 'right 6px center',
+                paddingRight: '24px',
+                maxWidth: '50%',
+                width: 'auto',
+                minWidth: '225px'
               }}
             >
               {leagues.map((league) => (

@@ -200,7 +200,66 @@ def add_statistical_analysis(players_df: pd.DataFrame, api_client, gameweek: int
     return players_df
 
 def train_and_predict_ml(db_manager, players_df: pd.DataFrame, config: dict, model_version: str) -> pd.DataFrame:
-    if not ML_ENGINE_AVAILABLE or MLEngine is None: return players_df
+    # Check if v5.0 is requested
+    if model_version == "v5.0":
+        if not ML_ENGINE_V5_AVAILABLE or MLEngineV5 is None:
+            logger.warning("v5.0 requested but MLEngineV5 not available, falling back to v4.6")
+            model_version = "v4.6"
+        else:
+            try:
+                logger.info(f"Initializing ML Engine v5.0 (stacking architecture)...")
+                ml_engine = MLEngineV5(db_manager, model_version=model_version)
+                
+                if not ml_engine.load_model():
+                    logger.info("No trained v5.0 model found, training new model...")
+                    ml_engine.train_model()
+                    ml_engine.save_model()
+                else:
+                    logger.info("Loaded existing trained v5.0 model")
+                
+                logger.info("Generating player performance predictions (v5.0 stacked)...")
+                predictions_df = ml_engine.predict_player_performance(players_df)
+                
+                if not predictions_df.empty:
+                    # SANITY CHECK: If ML predictions are broken (Max EV < 2.0), abort ML
+                    max_ev = predictions_df['predicted_ev'].max()
+                    if max_ev < 1.0:
+                        logger.warning(f"⚠️ ML Predictions look invalid (Max EV: {max_ev:.2f}).")
+                        logger.warning("   Likely missing current season history in DB.")
+                        logger.warning("   Run 'python src/update_stats.py' to fix.")
+                        logger.warning("   Falling back to standard projections.")
+                        return players_df
+                    
+                    # Save to DB
+                    if db_manager:
+                        save_df = predictions_df.copy()
+                        save_df['gw'] = 999 
+                        save_df['model_version'] = model_version
+                        db_manager.save_predictions(save_df.to_dict('records'))
+                    
+                    # Merge
+                    predictions_df = predictions_df[['player_id', 'predicted_ev']]
+                    players_df = players_df.merge(predictions_df, left_on='id', right_on='player_id', how='left')
+                    
+                    # Apply 'Chance of Playing' logic
+                    if 'chance_of_playing_next_round' in players_df.columns:
+                        chance = pd.to_numeric(players_df['chance_of_playing_next_round'], errors='coerce').fillna(100)
+                        multiplier = chance / 100.0
+                        players_df['predicted_ev'] = players_df['predicted_ev'] * multiplier
+                    
+                    players_df['EV'] = players_df['predicted_ev'].fillna(0)
+                    return players_df
+                else:
+                    logger.warning("v5.0 predictions empty, falling back to standard projections")
+                    return players_df
+            except Exception as e:
+                logger.error(f"Error with v5.0 ML engine: {e}", exc_info=True)
+                logger.warning("Falling back to v4.6")
+                model_version = "v4.6"
+    
+    # Fallback to v4.6 or use v4.6 by default
+    if not ML_ENGINE_AVAILABLE or MLEngine is None: 
+        return players_df
     
     try:
         logger.info(f"Initializing ML Engine ({model_version})...")
@@ -232,6 +291,40 @@ def train_and_predict_ml(db_manager, players_df: pd.DataFrame, config: dict, mod
                 save_df['gw'] = 999 
                 save_df['model_version'] = model_version
                 db_manager.save_predictions(save_df.to_dict('records'))
+                
+                # Record predictions for validation tracking
+                try:
+                    from validation_tracker import ValidationTracker
+                    from fpl_api import FPLAPIClient
+                    tracker = ValidationTracker(db_manager, FPLAPIClient(cache_dir='.cache'))
+                    
+                    # Get current gameweek
+                    api_client = FPLAPIClient(cache_dir='.cache')
+                    current_gw = api_client.get_current_gameweek()
+                    
+                    # Get player names from bootstrap
+                    bootstrap = api_client.get_bootstrap_static(use_cache=True)
+                    players_dict = {p['id']: p.get('web_name', f"Player_{p['id']}") 
+                                   for p in bootstrap.get('elements', [])}
+                    
+                    # Record each prediction
+                    for _, row in predictions_df.iterrows():
+                        player_id = int(row['player_id'])
+                        predicted_ev = float(row['predicted_ev'])
+                        # Estimate points_per_90 (predicted_ev is already adjusted for minutes)
+                        # We'll use predicted_ev as an approximation
+                        predicted_points_per_90 = predicted_ev * 1.5  # Rough estimate
+                        
+                        tracker.record_prediction(
+                            player_id=player_id,
+                            gw=current_gw,
+                            predicted_ev=predicted_ev,
+                            predicted_points_per_90=predicted_points_per_90,
+                            model_version=model_version,
+                            player_name=players_dict.get(player_id)
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not record predictions for validation: {e}")
             
             # Merge
             predictions_df = predictions_df[['player_id', 'predicted_ev']]
@@ -790,7 +883,9 @@ def main():
     chips_used = [c['name'] for c in entry_history.get('chips', [])]
     avail_chips = [c for c in ['bboost', '3xc', 'freehit', 'wildcard'] if c not in chips_used]
     evals = chip_eval.evaluate_all_chips(
-        current_squad, players_df, gameweek, avail_chips, bank, smart_recs['recommendations']
+        current_squad, players_df, gameweek, avail_chips, bank, 
+        transfer_recommendations=smart_recs['recommendations'],
+        fixtures=fixtures_for_gw
     )
     
     Path(args.output_dir).mkdir(exist_ok=True)

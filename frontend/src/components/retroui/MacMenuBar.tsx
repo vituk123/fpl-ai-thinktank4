@@ -72,15 +72,45 @@ const MacMenuBar: React.FC = () => {
               <nav className="hidden md:flex space-x-6 h-full items-center ml-4">
                 <div className="relative group h-full flex items-center cursor-pointer">
                     <span className="font-bold text-sm">Dashboard</span>
-                    <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px]">
-                        <button onClick={() => navigate('/dashboard')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Overview</button>
-                        <button onClick={() => navigate('/live')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Gameweek Points Tracking</button>
+                    <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px] z-50">
+                        <button 
+                          onClick={() => navigate('/dashboard')} 
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                            navigate('/dashboard');
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white active:bg-retro-primary active:text-white text-sm font-medium touch-manipulation"
+                          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minHeight: '44px' }}
+                        >
+                          Overview
+                        </button>
+                        <button 
+                          onClick={() => navigate('/live')} 
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                            navigate('/live');
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white active:bg-retro-primary active:text-white text-sm font-medium touch-manipulation"
+                          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minHeight: '44px' }}
+                        >
+                          Gameweek Points Tracking
+                        </button>
                     </div>
                 </div>
                  <div className="relative group h-full flex items-center cursor-pointer">
                     <span className="font-bold text-sm">Optimize</span>
-                    <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px]">
-                        <button onClick={() => navigate('/recommendations')} className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white text-sm font-medium">Team Optimization</button>
+                    <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px] z-50">
+                        <button 
+                          onClick={() => navigate('/recommendations')} 
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                            navigate('/recommendations');
+                          }}
+                          className="block w-full text-left px-4 py-2 hover:bg-retro-primary hover:text-white active:bg-retro-primary active:text-white text-sm font-medium touch-manipulation"
+                          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minHeight: '44px' }}
+                        >
+                          Team Optimization
+                        </button>
                     </div>
                 </div>
                 {/* News button disabled */}
@@ -109,36 +139,64 @@ const MacMenuBar: React.FC = () => {
   // Mobile view (custom dropdown menu with retro styling)
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 h-9 bg-white border-b-retro border-retro-primary z-50 flex items-center justify-between pl-4 sm:pl-8 pr-2 sm:pr-4 select-none overflow-visible">
+      <div className="fixed top-0 left-0 right-0 h-9 bg-white border-b-retro border-retro-primary z-50 flex items-center justify-between pl-2 sm:pl-4 pr-2 select-none overflow-hidden">
         {/* Logo */}
         <button 
           onClick={() => {
             navigate(isAuthenticated ? '/dashboard' : '/');
             setIsMenuOpen(false);
-          }} 
-          className="flex items-center justify-center hover:opacity-80 transition-opacity flex-shrink-0 overflow-visible p-0 m-0"
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+            navigate(isAuthenticated ? '/dashboard' : '/');
+            setIsMenuOpen(false);
+          }}
+          className="flex items-center justify-center hover:opacity-80 active:opacity-60 transition-opacity flex-shrink-0 overflow-visible p-0 m-0 touch-manipulation"
+          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minWidth: '60px' }}
         >
           <img src="/logo1.png" alt="FPL OPTIMIZER" className="h-[204px] w-auto" style={{ marginTop: '-100px', marginBottom: '-84px', marginLeft: '-20px', marginRight: '0' }} />
         </button>
 
         {/* Status elements - between logo and menu button */}
-        <div className="flex items-center space-x-1 sm:space-x-2 text-xs font-bold flex-1 justify-end mr-2 min-w-0">
+        <div className="flex items-center gap-1 text-xs font-bold flex-1 justify-end mr-1 sm:mr-2 min-w-0 overflow-hidden">
           {isAuthenticated && entryInfo && (
-            <div className="flex items-center pr-1 sm:pr-2 mr-1 sm:mr-2 min-w-0">
-              <span className="font-bold text-[10px] sm:text-xs whitespace-nowrap">{entryInfo.name}</span>
-              <button onClick={logout} className="ml-1 sm:ml-2 text-[8px] sm:text-[10px] uppercase border-2 border-retro-primary px-0.5 sm:px-1 hover:bg-retro-error hover:text-white transition-colors flex-shrink-0">Logout</button>
+            <div className="flex items-center gap-1 min-w-0 flex-shrink">
+              <span 
+                className="font-bold text-[9px] sm:text-[10px] whitespace-nowrap truncate max-w-[80px] sm:max-w-[120px]"
+                title={entryInfo.name}
+              >
+                {entryInfo.name}
+              </span>
+              <button 
+                onClick={logout}
+                onTouchStart={(e) => {
+                  e.stopPropagation();
+                  logout();
+                }}
+                className="text-[7px] sm:text-[8px] uppercase border-2 border-retro-primary px-1 py-0.5 hover:bg-retro-error hover:text-white active:bg-retro-error active:text-white transition-colors flex-shrink-0 touch-manipulation whitespace-nowrap"
+                style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minHeight: '20px', lineHeight: '1' }}
+              >
+                Out
+              </button>
             </div>
           )}
-          <Wifi size={10} strokeWidth={3} className="hidden sm:block sm:w-3 sm:h-3 flex-shrink-0" />
-          <Battery size={10} strokeWidth={3} className="hidden sm:block sm:w-3 sm:h-3 flex-shrink-0" />
-          <span className="text-[10px] sm:text-xs whitespace-nowrap flex-shrink-0">{day} {formattedTime}</span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Wifi size={10} strokeWidth={3} className="hidden sm:block sm:w-3 sm:h-3" />
+            <Battery size={10} strokeWidth={3} className="hidden sm:block sm:w-3 sm:h-3" />
+            <span className="text-[9px] sm:text-[10px] whitespace-nowrap">{day} {formattedTime}</span>
+          </div>
         </div>
 
         {/* Menu Toggle Button */}
         {isAuthenticated && (
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="flex items-center justify-center h-7 w-7 border-2 border-retro-primary bg-white hover:bg-retro-primary hover:text-white transition-colors flex-shrink-0"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              setIsMenuOpen(!isMenuOpen);
+            }}
+            className="flex items-center justify-center h-7 w-7 border-2 border-retro-primary bg-white hover:bg-retro-primary hover:text-white active:bg-retro-primary active:text-white transition-colors flex-shrink-0 touch-manipulation"
+            style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
             aria-label="Toggle menu"
           >
             {isMenuOpen ? (
@@ -155,8 +213,16 @@ const MacMenuBar: React.FC = () => {
         <div 
           ref={menuRef}
           className="fixed top-9 left-0 right-0 bg-white border-b-2 border-retro-primary shadow-[4px_4px_0_rgba(0,0,0,0.1)] z-40"
+          style={{ 
+            maxWidth: '100vw', 
+            width: '100%',
+            overflowX: 'auto',
+            overflowY: 'visible',
+            touchAction: 'pan-x',
+            WebkitOverflowScrolling: 'touch'
+          }}
         >
-          <nav className="flex flex-col">
+          <nav className="flex flex-col" style={{ minWidth: '100%', width: '100%' }}>
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -166,15 +232,28 @@ const MacMenuBar: React.FC = () => {
                     navigate(item.href);
                     setIsMenuOpen(false);
                   }}
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    navigate(item.href);
+                    setIsMenuOpen(false);
+                  }}
                   className={`
                     w-full text-left px-4 py-3 font-bold text-sm uppercase tracking-wider
                     border-b-2 border-retro-primary
-                    transition-colors
+                    transition-colors touch-manipulation
+                    whitespace-nowrap
                     ${isActive 
                       ? 'bg-retro-primary text-white' 
-                      : 'bg-white text-retro-primary hover:bg-retro-background'
+                      : 'bg-white text-retro-primary hover:bg-retro-background active:bg-retro-background'
                     }
                   `}
+                  style={{ 
+                    touchAction: 'manipulation', 
+                    WebkitTapHighlightColor: 'transparent', 
+                    minHeight: '44px',
+                    width: '100%',
+                    maxWidth: '100%'
+                  }}
                 >
                   {item.label}
                 </button>

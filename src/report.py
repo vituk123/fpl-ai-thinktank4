@@ -83,11 +83,35 @@ class ReportGenerator:
         return updated_squad
     
     def _build_starting_xi(self, squad: pd.DataFrame) -> pd.DataFrame:
-        """Build starting XI from squad (top 11 by EV, respecting formation)."""
+        """
+        Build starting XI from squad (top 11 by EV, respecting formation).
+        Uses adjusted FDR as a tie-breaker when EV values are similar.
+        """
         if len(squad) < 11:
             return squad.nlargest(len(squad), 'EV')
         
-        squad_sorted = squad.sort_values('EV', ascending=False)
+        # Create a composite score: EV (primary) + inverse FDR (tie-breaker)
+        # Lower FDR = easier fixture = higher score
+        # Use fdr_adjusted if available, otherwise fallback to fdr
+        if 'fdr_adjusted' in squad.columns:
+            fdr_col = 'fdr_adjusted'
+        elif 'fdr' in squad.columns:
+            fdr_col = 'fdr'
+        else:
+            fdr_col = None
+        
+        if fdr_col:
+            # Normalize FDR to 0-1 scale (inverse: lower FDR = higher score)
+            # FDR range is 1-5, so inverse = (6 - FDR) / 5
+            squad = squad.copy()
+            squad['_fdr_score'] = (6 - pd.to_numeric(squad[fdr_col], errors='coerce').fillna(3.0)) / 5.0
+            # Create composite score: EV + small FDR bonus (acts as tie-breaker)
+            # FDR bonus is small (0.1 * normalized FDR) so it only affects when EV is similar
+            squad['_composite_score'] = pd.to_numeric(squad.get('EV', 0), errors='coerce').fillna(0) + (0.1 * squad['_fdr_score'])
+            squad_sorted = squad.sort_values('_composite_score', ascending=False)
+        else:
+            # Fallback to EV only if no FDR available
+            squad_sorted = squad.sort_values('EV', ascending=False)
         
         # FPL formation constraints: min 1 GKP, 3 DEF, 3 MID, 1 FWD
         # Max: 1 GKP, 5 DEF, 5 MID, 3 FWD
@@ -674,6 +698,24 @@ class ReportGenerator:
                 # Get element_type (position)
                 element_type = to_python_type(row.get('element_type', player_dict.get('element_type', 0)))
                 
+                # Get now_cost (price in API units, e.g., 76 = £7.6m)
+                # Priority: 1) player_dict (from optimizer), 2) row (from players_df)
+                now_cost = None
+                if 'now_cost' in player_dict and player_dict['now_cost'] is not None:
+                    try:
+                        now_cost = int(to_python_type(player_dict['now_cost']))
+                    except:
+                        pass
+                
+                if now_cost is None and 'now_cost' in row and not pd.isna(row['now_cost']):
+                    try:
+                        now_cost = int(to_python_type(row['now_cost']))
+                    except:
+                        pass
+                
+                if now_cost is None:
+                    now_cost = 0  # Default to 0 if not found
+                
                 return {
                     "id": to_python_type(player_id),
                     "name": str(to_python_type(row.get('web_name', player_dict.get('name', '')))),
@@ -683,7 +725,8 @@ class ReportGenerator:
                     "ev": ev,
                     "ownership": ownership,
                     "points_per_game": points_per_game,
-                    "fdr": fdr
+                    "fdr": fdr,
+                    "now_cost": now_cost
                 }
             
             transfer_recommendations["hit_vs_no_hit_comparison"] = comparison

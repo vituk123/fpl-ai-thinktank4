@@ -20,56 +20,44 @@ const LiveTracking: React.FC = () => {
 
     const fetchData = async () => {
       try {
-        // Fetch gameweek and live data in parallel for faster loading
-        // Use a reasonable default gameweek (16-20 range) to start, backend will handle if wrong
-        const defaultGameweek = 16; // Common gameweek range, will be corrected by backend
-        
-        const [gameweekResult, liveDataResult] = await Promise.allSettled([
-          entryApi.getCurrentGameweek(),
-          liveApi.getLiveGameweek(defaultGameweek, entryId)
-        ]);
-
-        // Get the actual gameweek
-        let gameweek = defaultGameweek;
-        if (gameweekResult.status === 'fulfilled') {
-          gameweek = gameweekResult.value;
+        // First, get the current gameweek from backend
+        let gameweek = 1;
+        try {
+          gameweek = await entryApi.getCurrentGameweek();
           setCurrentGameweek(gameweek);
           console.log('LiveTracking: Fetched current gameweek from backend:', gameweek);
+        } catch (e) {
+          console.warn('LiveTracking: Failed to get current gameweek, will try to get from live data:', e);
         }
 
-        // Handle live data result
-        if (liveDataResult.status === 'fulfilled' && liveDataResult.value) {
-          let data = liveDataResult.value;
-          const playerBreakdown = data?.data?.player_breakdown || data?.player_breakdown || [];
+        // Fetch live data with the determined gameweek
+        try {
+          const data = await liveApi.getLiveGameweek(gameweek, entryId);
           
-          // If data is empty and we have the correct gameweek, try fetching with that
-          if (playerBreakdown.length === 0 && gameweek !== defaultGameweek && gameweek > 1) {
-            console.log("LiveTracking: No players found, trying fetched gameweek:", gameweek);
-            try {
-              data = await liveApi.getLiveGameweek(gameweek, entryId);
-            } catch (e) {
-              console.error("LiveTracking: Failed to fetch with gameweek:", e);
-            }
-          }
-          
-          // Update gameweek from data if available
+          // Update gameweek from data if available (most reliable source)
           if (data?.data?.gameweek) {
-            setCurrentGameweek(data.data.gameweek);
+            const dataGameweek = data.data.gameweek;
+            setCurrentGameweek(dataGameweek);
+            console.log('LiveTracking: Gameweek from live data:', dataGameweek);
+            
+            // If gameweek from data differs, fetch again with correct gameweek
+            if (dataGameweek !== gameweek && dataGameweek > 1) {
+              console.log(`LiveTracking: Gameweek mismatch (backend: ${gameweek}, data: ${dataGameweek}), refetching with correct gameweek`);
+              try {
+                const correctedData = await liveApi.getLiveGameweek(dataGameweek, entryId);
+                setLiveData(correctedData);
+                setLastUpdated(new Date());
+                return;
+              } catch (e) {
+                console.error("LiveTracking: Failed to fetch with corrected gameweek:", e);
+              }
+            }
           }
           
           setLiveData(data);
           setLastUpdated(new Date());
-        } else if (gameweekResult.status === 'fulfilled' && gameweek > 1) {
-          // If live data fetch failed but we have gameweek, try fetching with correct gameweek
-          try {
-            const data = await liveApi.getLiveGameweek(gameweek, entryId);
-        setLiveData(data);
-        setLastUpdated(new Date());
-      } catch (e: any) {
-        console.error("LiveTracking: Fetch error:", e);
-            setLiveData(null);
-          }
-        } else {
+        } catch (e: any) {
+          console.error("LiveTracking: Fetch error:", e);
           setLiveData(null);
         }
       } catch (e: any) {

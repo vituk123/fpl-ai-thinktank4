@@ -1,0 +1,178 @@
+INFO:ingest_history:Starting Full Ingestion of 10 seasons...
+INFO:ingest_history:Seasons: 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26
+INFO:ingest_history:Resetting history tables...
+INFO:database:History tables dropped. Recreating with new schema...
+INFO:httpx:HTTP Request: GET https://sdezcbesdubplacfxibc.supabase.co/rest/v1/current_season_history?select=player_id&limit=1 "HTTP/2 404 Not Found"
+WARNING:database:Could not create user_credentials table: 'DatabaseManager' object has no attribute 'get_connection'
+INFO:database:Database tables created/verified via PostgreSQL.
+INFO:ingest_history:Processing 2016-17...
+WARNING:ingest_history:  GW1: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW2: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW3: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW4: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW5: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW6: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW7: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW8: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW9: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW10: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW11: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW12: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW13: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW14: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW15: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW16: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW17: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW18: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW19: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW20: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW21: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW22: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW23: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW24: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW25: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW26: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW27: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW28: Error - 'utf-8' codec can't decode byte 0xe1 in position 9: invalid continuation byte
+WARNING:ingest_history:  GW29: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW30: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW31: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW32: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW33: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW34: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW35: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW36: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW37: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW38: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  No data found for 2016-17
+INFO:ingest_history:  ✓ 2016-17: Added 0 records
+INFO:ingest_history:Processing 2017-18...
+WARNING:ingest_history:  GW1: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW2: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW3: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW4: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW5: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW6: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW7: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW8: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW9: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW10: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW11: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW12: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW13: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW14: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW15: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW16: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW17: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW18: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW19: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW20: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW21: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW22: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW23: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW24: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW25: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW26: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW27: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW28: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW29: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW30: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW31: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW32: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW33: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW34: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW35: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW36: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW37: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  GW38: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: unexpected end of data
+WARNING:ingest_history:  No data found for 2017-18
+INFO:ingest_history:  ✓ 2017-18: Added 0 records
+INFO:ingest_history:Processing 2018-19...
+WARNING:ingest_history:  GW1: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW2: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW3: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW4: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW5: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW6: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW7: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW8: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW9: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW10: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW11: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW12: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW13: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW14: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW15: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW16: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW17: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW18: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW19: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW20: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW21: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW22: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW23: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW24: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW25: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW26: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW27: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW28: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW29: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW30: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW31: Error - 'utf-8' codec can't decode byte 0xe1 in position 4: invalid continuation byte
+WARNING:ingest_history:  GW32: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW33: Error - 'utf-8' codec can't decode byte 0xe1 in position 4: invalid continuation byte
+WARNING:ingest_history:  GW34: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW35: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW36: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW37: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  GW38: Error - 'utf-8' codec can't decode byte 0xe9 in position 17: invalid continuation byte
+WARNING:ingest_history:  No data found for 2018-19
+INFO:ingest_history:  ✓ 2018-19: Added 23679 records
+INFO:ingest_history:Processing 2019-20...
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:87: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df['season'] = season
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:140: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  
+INFO:ingest_history:  Processed 38 gameweeks, 16556 total records
+INFO:database:Saved 16556 archived records.
+INFO:ingest_history:  ✓ 2019-20: Added 16556 records
+INFO:ingest_history:Processing 2020-21...
+INFO:ingest_history:  Processed 38 gameweeks, 24365 total records
+INFO:database:Saved 24365 archived records.
+INFO:ingest_history:  ✓ 2020-21: Added 24365 records
+INFO:ingest_history:Processing 2021-22...
+INFO:ingest_history:  Processed 38 gameweeks, 25447 total records
+INFO:database:Saved 25447 archived records.
+INFO:ingest_history:  ✓ 2021-22: Added 63793 records
+INFO:ingest_history:Processing 2022-23...
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:87: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  df['season'] = season
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:140: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  
+INFO:ingest_history:  Processed 38 gameweeks, 26505 total records
+INFO:database:Saved 26505 archived records.
+INFO:ingest_history:  ✓ 2022-23: Added 50870 records
+INFO:ingest_history:Processing 2023-24...
+INFO:ingest_history:  Processed 38 gameweeks, 29725 total records
+INFO:database:Saved 29725 archived records.
+INFO:ingest_history:  ✓ 2023-24: Added 55172 records
+INFO:ingest_history:Processing 2024-25...
+INFO:ingest_history:  Processed 38 gameweeks, 27605 total records
+INFO:database:Saved 27605 archived records.
+INFO:ingest_history:  ✓ 2024-25: Added 54110 records
+INFO:ingest_history:Processing 2025-26...
+INFO:ingest_history:  Processed 8 gameweeks, 5821 total records
+INFO:database:Saved 5821 archived records.
+INFO:ingest_history:  ✓ 2025-26: Added 35546 records
+INFO:ingest_history:Total records ingested: 324091
+======================================================================
+DOWNLOADING ALL AVAILABLE HISTORICAL FPL DATA
+======================================================================
+
+This will download data from 2016-17 to 2025-26 (10 seasons)
+This may take several minutes...
+
+
+======================================================================
+DOWNLOAD COMPLETE!
+======================================================================

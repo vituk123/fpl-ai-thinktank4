@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { HelpCircle } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 interface TooltipProps {
   text: string;
@@ -9,8 +10,20 @@ interface TooltipProps {
 
 const Tooltip: React.FC<TooltipProps> = ({ text, children, className = '' }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLSpanElement>(null);
+  const location = useLocation();
+  const isLandingPage = location.pathname === '/' || location.pathname === '/landing';
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -86,21 +99,31 @@ const Tooltip: React.FC<TooltipProps> = ({ text, children, className = '' }) => 
       {children}
       <button
         type="button"
-        className="ml-1 inline-flex items-center focus:outline-none"
+        className="ml-1 inline-flex items-center focus:outline-none touch-manipulation"
         onMouseEnter={() => setIsVisible(true)}
         onMouseLeave={() => setIsVisible(false)}
+        onTouchStart={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsVisible(!isVisible);
+        }}
         onClick={(e) => {
           e.preventDefault();
           setIsVisible(!isVisible);
         }}
         aria-label="Show explanation"
+        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
       >
-        <HelpCircle className="w-3 h-3 text-retro-primary opacity-70 hover:opacity-100 transition-opacity" />
+        <HelpCircle 
+          className="text-retro-primary opacity-70 hover:opacity-100 active:opacity-100 transition-opacity" 
+          size={isLandingPage ? (isMobile ? 24 : 12) : (isMobile ? 12 : 6)}
+          strokeWidth={isLandingPage ? (isMobile ? 2.5 : 2) : (isMobile ? 1.25 : 1)}
+        />
       </button>
       {isVisible && (
         <div
           ref={tooltipRef}
-          className="absolute bottom-full left-0 mb-2 p-2 bg-white border-2 border-retro-primary shadow-[4px_4px_0_rgba(0,0,0,0.1)] z-50 text-xs break-words"
+          className={`absolute bottom-full left-0 mb-2 ${isLandingPage ? 'p-2' : 'p-1'} bg-white border-2 border-retro-primary shadow-[4px_4px_0_rgba(0,0,0,0.1)] z-50 ${isLandingPage ? 'text-xs' : 'text-[10px]'} break-words`}
           style={{ width: 'max-content' }}
           onMouseEnter={() => setIsVisible(true)}
           onMouseLeave={() => setIsVisible(false)}

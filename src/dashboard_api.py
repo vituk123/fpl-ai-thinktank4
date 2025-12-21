@@ -36,6 +36,22 @@ except ImportError:
     MLEngine = None
     ML_ENGINE_AVAILABLE = False
 
+# ML Engine v5.0 import
+try:
+    from .ml_engine_v5 import MLEngineV5
+    ML_ENGINE_V5_AVAILABLE = True
+except ImportError:
+    MLEngineV5 = None
+    ML_ENGINE_V5_AVAILABLE = False
+
+# Team search import
+try:
+    from .team_search import TeamSearch
+    TEAM_SEARCH_AVAILABLE = True
+except ImportError:
+    TeamSearch = None
+    TEAM_SEARCH_AVAILABLE = False
+
 # Learning system import
 try:
     from .main import apply_learning_system
@@ -181,11 +197,12 @@ dashboard: Optional[VisualizationDashboard] = None
 db_manager: Optional[DatabaseManager] = None
 api_client: Optional[FPLAPIClient] = None
 live_tracker: Optional[LiveGameweekTracker] = None
+team_search: Optional[TeamSearch] = None
 
 @app.on_event("startup")  # type: ignore
 async def startup_event():
     """Initialize clients on startup"""
-    global dashboard, db_manager, api_client, config
+    global dashboard, db_manager, api_client, config, team_search
     try:
         config = load_config()
         
@@ -328,6 +345,21 @@ async def get_entry_info(
         # Extract team name (from entry name)
         team_name = entry_info.get('name', 'Unknown Team')
         
+        # Auto-populate fpl_teams table for search functionality
+        # This ensures the database grows organically as users use the system
+        if db_manager and db_manager.supabase_client:
+            try:
+                # Upsert team data into fpl_teams table
+                db_manager.supabase_client.table('fpl_teams').upsert({
+                    'team_id': entry_id,
+                    'team_name': team_name,
+                    'manager_name': manager_name
+                }).execute()
+                logger.debug(f"Auto-populated fpl_teams table for entry_id: {entry_id}")
+            except Exception as e:
+                # Log error but don't fail the request if upsert fails
+                logger.warning(f"Failed to auto-populate fpl_teams table for entry_id {entry_id}: {e}")
+        
         # Return full entry info for frontend compatibility
         return StandardResponse(
             data={
@@ -356,6 +388,44 @@ async def get_entry_info(
     except Exception as e:
         logger.error(f"Error fetching entry info: {e}")
         raise HTTPException(status_code=404, detail=f"Entry ID {entry_id} not found or invalid")
+
+
+# ==================== TEAM SEARCH ENDPOINT ====================
+@app.get("/api/v1/search/teams")
+async def search_teams(
+    q: str = Query(..., description="Search query (team name or manager name)"),
+    limit: int = Query(20, description="Maximum number of results to return")
+):
+    """
+    Search FPL teams by team name or manager name.
+    Searches the CSV file stored on the server.
+    """
+    if not team_search:
+        raise HTTPException(
+            status_code=503, 
+            detail="Team search is not available. The CSV file may not be loaded on the server."
+        )
+    
+    if not q or not q.strip():
+        return StandardResponse(
+            data={"matches": []},
+            meta={"query": q, "count": 0}
+        )
+    
+    try:
+        results = team_search.search(q.strip(), limit=limit)
+        
+        return StandardResponse(
+            data={"matches": results},
+            meta={
+                "query": q,
+                "count": len(results),
+                "limit": limit
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error searching teams: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to search teams: {str(e)}")
 
 
 # ==================== MINI-LEAGUE ENDPOINTS ====================
@@ -518,8 +588,77 @@ async def get_live_gameweek(
         # Use actual_gameweek for live_points and player_breakdown (the GW we have picks for)
         # But try to get team_summary for the original gameweek first (for current ranks)
         # If that doesn't have rank data, fall back to actual_gameweek
-        live_points = tracker.get_live_points(actual_gameweek, bootstrap=bootstrap, entry_history=entry_history, picks_data=picks_data)
         player_breakdown = tracker.get_player_breakdown(actual_gameweek, bootstrap=bootstrap, picks_data=picks_data, fixtures=fixtures)
+        
+        # Calculate live_points from player_breakdown (which has correct current GW points)
+        # This ensures totals match the individual player points shown
+        total_points = 0
+        starting_xi_points = 0
+        bench_points = 0
+        captain_points = 0
+        vice_captain_points = 0
+        
+        # Get chip information for multipliers
+        chips_used = entry_history.get('chips', [])
+        bench_boost_active = any(
+            chip.get('event') == actual_gameweek and chip.get('name') == 'bboost' 
+            for chip in chips_used
+        )
+        triple_captain_active = any(
+            chip.get('event') == actual_gameweek and chip.get('name') == '3xc' 
+            for chip in chips_used
+        )
+        
+        logger.info(f"Live tracking: Calculating totals from {len(player_breakdown)} players, triple_captain_active={triple_captain_active}, bench_boost_active={bench_boost_active}")
+        
+        for player in player_breakdown:
+            # The 'points' field in player_breakdown already has the correct current GW points
+            # and has 2x multiplier applied for captains (see get_player_breakdown line 1151)
+            player_points = player.get('points', 0)
+            is_captain = player.get('is_captain', False)
+            is_vice = player.get('is_vice_captain', False) or player.get('is_vice', False)
+            is_starting = player.get('position', 0) <= 11
+            
+            # Calculate base_points and final points with correct multiplier
+            if is_captain:
+                # Points already has 2x multiplier, so get base by dividing by 2
+                base_points = player_points / 2.0
+                # Apply correct multiplier (3x for triple captain, 2x for normal)
+                captain_multiplier = 3 if triple_captain_active else 2
+                points = base_points * captain_multiplier
+                captain_points = points
+                logger.debug(f"Live tracking: Captain {player.get('name')} - base={base_points}, multiplier={captain_multiplier}, final={points}")
+            elif is_vice:
+                # Vice captain doesn't get multiplier
+                base_points = player_points
+                points = base_points
+                vice_captain_points = points
+            else:
+                # Regular player, no multiplier
+                base_points = player_points
+                points = base_points
+            
+            if is_starting:
+                starting_xi_points += points
+                total_points += points
+            else:
+                bench_points += base_points
+                # Include bench points in total only if Bench Boost is active
+                if bench_boost_active:
+                    total_points += base_points
+        
+        logger.info(f"Live tracking: Calculated totals - total={total_points}, starting_xi={starting_xi_points}, bench={bench_points}, captain={captain_points}")
+        
+        # Build live_points dict from calculated values
+        live_points = {
+            'total': total_points,
+            'starting_xi': starting_xi_points,
+            'bench': bench_points,
+            'captain': captain_points,
+            'vice_captain': vice_captain_points,
+            'bench_boost_active': bench_boost_active,
+            'triple_captain_active': triple_captain_active,
+        }
         
         # Try to get team_summary for original gameweek first (for current ranks)
         team_summary = tracker.get_team_summary(original_gameweek, league_id=league_id, entry_info=entry_info, entry_history=entry_history)
@@ -576,6 +715,7 @@ async def get_live_gameweek(
                     "captain": live_points.get('captain', 0),
                     "vice_captain": live_points.get('vice_captain', 0),
                     "bench_boost_active": live_points.get('bench_boost_active', False),
+                    "triple_captain_active": live_points.get('triple_captain_active', False),
                 },
                 "player_breakdown": player_breakdown,
                 "team_summary": team_summary,
@@ -603,6 +743,7 @@ async def get_live_gameweek(
                     "captain": 0,
                     "vice_captain": 0,
                     "bench_boost_active": False,
+                    "triple_captain_active": False,
                 },
                 "player_breakdown": [],
                 "team_summary": {},
@@ -643,25 +784,29 @@ async def get_current_gameweek():
         now = datetime.now(timezone.utc)
         current_event = None
         
-        # First, check is_current flag (most reliable indicator of gameweek in session)
-        current_event = next((e for e in events if e.get('is_current', False)), None)
+        # PRIORITY 1: Find the latest gameweek that has started (deadline passed) but not finished
+        # This is more reliable than is_current flag which can be stale during transitions
+        # Sort events by ID descending to check latest first
+        for event in sorted(events, key=lambda x: x.get('id', 0), reverse=True):
+            deadline_str = event.get('deadline_time')
+            if deadline_str:
+                try:
+                    # Parse deadline (FPL API uses ISO format with timezone)
+                    deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
+                    # If deadline has passed but gameweek is not finished, it's in session
+                    if deadline < now and not event.get('finished', False):
+                        current_event = event
+                        logger.info(f"get_current_gameweek: Found gameweek in session: GW{current_event.get('id')} (deadline passed, not finished)")
+                        break
+                except Exception as e:
+                    logger.debug(f"Error parsing deadline for event {event.get('id')}: {e}")
+                    pass
         
-        # If no is_current, find the latest gameweek that has started but not finished
+        # PRIORITY 2: If no deadline-based match, check is_current flag (fallback)
         if not current_event:
-            # Sort events by ID descending to check latest first
-            for event in sorted(events, key=lambda x: x.get('id', 0), reverse=True):
-                deadline_str = event.get('deadline_time')
-                if deadline_str:
-                    try:
-                        # Parse deadline (FPL API uses ISO format with timezone)
-                        deadline = datetime.fromisoformat(deadline_str.replace('Z', '+00:00'))
-                        # If deadline has passed but gameweek is not finished, it's in session
-                        if deadline < now and not event.get('finished', False):
-                            current_event = event
-                            break
-                    except Exception as e:
-                        logger.debug(f"Error parsing deadline for event {event.get('id')}: {e}")
-                        pass
+            current_event = next((e for e in events if e.get('is_current', False)), None)
+            if current_event:
+                logger.info(f"get_current_gameweek: Using is_current flag: GW{current_event.get('id')}")
         
         # Priority 3: If still no current, find latest finished gameweek (most recent completed)
         # This is the fallback - use the latest finished gameweek instead of is_next
@@ -893,7 +1038,17 @@ async def get_transfer_recommendations(
         logger.info(f"Generated {len(recommendations.get('recommendations', []))} raw recommendations")
         
         # Apply learning system if available
-        if ML_ENGINE_AVAILABLE and MLEngine:
+        # Check for v5.0
+        if model_version == "v5.0" and ML_ENGINE_V5_AVAILABLE and MLEngineV5:
+            ml_engine_instance = MLEngineV5(db_manager, model_version=model_version)
+            if ml_engine_instance.load_model():
+                ml_engine_instance.is_trained = True
+                recommendations['recommendations'] = apply_learning_system(
+                    db_manager, api_client, entry_id, gameweek,
+                    recommendations['recommendations'], ml_engine_instance
+                )
+                logger.info(f"After learning system (v5.0): {len(recommendations.get('recommendations', []))} recommendations")
+        elif ML_ENGINE_AVAILABLE and MLEngine:
             ml_engine_instance = MLEngine(db_manager, model_version=model_version)
             if ml_engine_instance.load_model():
                 ml_engine_instance.is_trained = True
@@ -1068,6 +1223,33 @@ async def generate_ml_predictions(
             
             db_manager.save_predictions(predictions.to_dict('records'))
             
+            # Record predictions for validation tracking
+            try:
+                from validation_tracker import ValidationTracker
+                tracker = ValidationTracker(db_manager, api_client)
+                
+                # Get player names from bootstrap
+                bootstrap = await loop.run_in_executor(None, api_client.get_bootstrap_static, True)
+                players_dict = {p['id']: p.get('web_name', f"Player_{p['id']}") 
+                               for p in bootstrap.get('elements', [])}
+                
+                # Record each prediction
+                for _, row in predictions.iterrows():
+                    player_id = int(row['player_id'])
+                    predicted_ev = float(row['predicted_ev'])
+                    predicted_points_per_90 = predicted_ev * 1.5  # Rough estimate
+                    
+                    tracker.record_prediction(
+                        player_id=player_id,
+                        gw=gameweek,
+                        predicted_ev=predicted_ev,
+                        predicted_points_per_90=predicted_points_per_90,
+                        model_version=model_version,
+                        player_name=players_dict.get(player_id)
+                    )
+            except Exception as e:
+                logger.warning(f"Could not record predictions for validation: {e}")
+            
             return StandardResponse(
                 data={
                     "status": "success",
@@ -1085,6 +1267,67 @@ async def generate_ml_predictions(
     except Exception as e:
         logger.error(f"Error generating ML predictions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate predictions: {str(e)}")
+
+@app.get("/api/v1/ml/validation/summary")
+async def get_validation_summary(
+    model_version: str = Query("v5.0", description="Model version"),
+    min_gw: Optional[int] = Query(None, description="Minimum gameweek"),
+    max_gw: Optional[int] = Query(None, description="Maximum gameweek")
+):
+    """Get validation summary for ML model predictions"""
+    if not db_manager:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        from validation_tracker import ValidationTracker
+        tracker = ValidationTracker(db_manager, api_client)
+        
+        summary = tracker.get_validation_summary(
+            model_version=model_version,
+            min_gw=min_gw,
+            max_gw=max_gw
+        )
+        
+        if 'error' in summary:
+            raise HTTPException(status_code=404, detail=summary['error'])
+        
+        return StandardResponse(
+            data=summary,
+            meta={
+                "generated_at": datetime.now().isoformat()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting validation summary: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get validation summary: {str(e)}")
+
+@app.get("/api/v1/ml/validation/validate")
+async def validate_gameweek(
+    gw: int = Query(..., description="Gameweek to validate"),
+    model_version: str = Query("v5.0", description="Model version")
+):
+    """Validate predictions for a specific gameweek"""
+    if not db_manager:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        from validation_tracker import ValidationTracker
+        tracker = ValidationTracker(db_manager, api_client)
+        
+        result = tracker.validate_predictions_for_gw(gw, model_version)
+        
+        if 'error' in result:
+            raise HTTPException(status_code=404, detail=result['error'])
+        
+        return StandardResponse(
+            data=result,
+            meta={
+                "validated_at": datetime.now().isoformat()
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error validating gameweek: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to validate gameweek: {str(e)}")
 
 @app.get("/api/v1/ml/players")
 async def get_ml_enhanced_players(

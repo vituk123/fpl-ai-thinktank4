@@ -81,7 +81,25 @@ def get_fpl_picks_direct(entry_id: int, gameweek: int) -> List[Dict]:
             player_ids = [p['element'] for p in picks]
             
             # #region agent log
-            debug_log("ml_report_v2.py:get_fpl_picks_direct", f"FPL API returned picks", {"player_ids": sorted(player_ids), "count": len(player_ids)}, "H1")
+            # Check if picks include selling_price
+            sample_pick = picks[0] if picks else {}
+            has_selling_price = 'selling_price' in sample_pick
+            selling_prices_sample = []
+            if has_selling_price:
+                for p in picks[:5]:  # Sample first 5
+                    selling_prices_sample.append({
+                        'id': p.get('element'),
+                        'selling_price': p.get('selling_price'),
+                        'purchase_price': p.get('purchase_price'),
+                        'now_cost': p.get('now_cost')
+                    })
+            debug_log("ml_report_v2.py:get_fpl_picks_direct", f"FPL API returned picks", {
+                "player_ids": sorted(player_ids), 
+                "count": len(player_ids),
+                "has_selling_price": has_selling_price,
+                "sample_pick_keys": list(sample_pick.keys()) if sample_pick else [],
+                "selling_prices_sample": selling_prices_sample
+            }, "C")
             # #endregion
             
             # IMMEDIATELY filter blocked players
@@ -166,6 +184,9 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
     if not picks:
         return {"error": "No picks data available"}
     
+    # Store picks_data for optimizer (contains selling_price information)
+    picks_data = {'picks': picks}
+    
     player_ids = [p['element'] for p in picks]
     
     # #region agent log
@@ -205,7 +226,7 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
         # Fallback: use form as proxy for EV
         players_df['EV'] = pd.to_numeric(players_df.get('form', 0), errors='coerce').fillna(0)
     
-    # Step 4.5: Calculate FDR (Fixture Difficulty Rating) for upcoming gameweek
+    # Step 4.5: Calculate FDR (Fixture Difficulty Rating) for upcoming gameweek with league position adjustment
     try:
         fixtures_response = requests.get("https://fantasy.premierleague.com/api/fixtures/", timeout=10)
         if fixtures_response.status_code == 200:
@@ -216,6 +237,7 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             
             # Build team FDR map from fixtures
             team_fdr_map = {}
+            team_opponent_map = {}  # Map team_id -> opponent_team_id for next gameweek
             for fixture in upcoming_fixtures:
                 home_team = fixture.get('team_h')
                 away_team = fixture.get('team_a')
@@ -224,37 +246,179 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                 
                 if home_team:
                     team_fdr_map[home_team] = home_difficulty
+                    team_opponent_map[home_team] = away_team
                 if away_team:
                     team_fdr_map[away_team] = away_difficulty
+                    team_opponent_map[away_team] = home_team
             
-            # Apply FDR to players DataFrame
+            # Get league table positions for tie-breaking
+            try:
+                # Use the bootstrap data we already have (from Step 3)
+                team_position_map = {}
+                teams_df = pd.DataFrame(bootstrap.get('teams', []))
+                # Sort by overall points (descending) to get league positions
+                # Teams with more points = higher in table = lower position number (1 = top)
+                if 'points' in teams_df.columns:
+                    teams_df_sorted = teams_df.sort_values('points', ascending=False).reset_index(drop=True)
+                    # Create map: team_id -> league_position (1 = top team, 20 = bottom team)
+                    for idx, row in teams_df_sorted.iterrows():
+                        team_position_map[row['id']] = idx + 1
+                    debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"League positions calculated", {"teams_with_position": len(team_position_map), "top_team": teams_df_sorted.iloc[0]['name'] if len(teams_df_sorted) > 0 else 'N/A'}, "H2")
+                else:
+                    debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"No 'points' column in teams data", {}, "H2")
+            except Exception as e:
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"Failed to calculate league positions", {"error": str(e)}, "H2")
+                team_position_map = {}
+            
+            # Apply base FDR to players DataFrame
             players_df['fdr'] = players_df['team'].map(lambda t: team_fdr_map.get(int(t), 3.0) if pd.notna(t) else 3.0)
-            debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"FDR calculated", {"teams_with_fdr": len(team_fdr_map), "next_gw": next_gw}, "H2")
+            
+            # Calculate adjusted FDR with league position weighting for tie-breaking
+            # This adjustment only applies when FDR values are similar (within 0.5)
+            players_df['fdr_adjusted'] = players_df['fdr'].copy()
+            
+            if team_position_map:
+                def adjust_fdr_with_league_position(row):
+                    """
+                    Adjust FDR based on opponent's league position.
+                    Higher league position (1-10) = harder opponent = increase FDR
+                    Lower league position (11-20) = easier opponent = decrease FDR
+                    This acts as a tie-breaker when base FDR values are similar.
+                    """
+                    base_fdr = row['fdr']
+                    team_id = int(row['team']) if pd.notna(row['team']) else None
+                    
+                    if team_id and team_id in team_opponent_map:
+                        opponent_id = team_opponent_map[team_id]
+                        if opponent_id and opponent_id in team_position_map:
+                            opponent_position = team_position_map[opponent_id]
+                            # League position adjustment:
+                            # Position 1 (top team) = hardest = +0.3 FDR adjustment
+                            # Position 20 (bottom team) = easiest = -0.3 FDR adjustment
+                            # Linear scaling: (21 - position) / 20 * 0.6 - 0.3
+                            # This gives range: -0.3 (position 20) to +0.3 (position 1)
+                            position_adjustment = ((21 - opponent_position) / 20.0 * 0.6) - 0.3
+                            # Apply adjustment (acts as tie-breaker when FDR values are similar)
+                            adjusted_fdr = base_fdr + position_adjustment
+                            # Clamp to valid FDR range (1-5)
+                            return max(1.0, min(5.0, adjusted_fdr))
+                    
+                    return base_fdr
+                
+                players_df['fdr_adjusted'] = players_df.apply(adjust_fdr_with_league_position, axis=1)
+            else:
+                players_df['fdr_adjusted'] = players_df['fdr']
+            
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"FDR calculated with league position adjustment", {"teams_with_fdr": len(team_fdr_map), "next_gw": next_gw, "teams_with_position": len(team_position_map)}, "H2")
         else:
             players_df['fdr'] = 3.0  # Default FDR
+            players_df['fdr_adjusted'] = 3.0
     except Exception as e:
         debug_log("ml_report_v2.py:generate_ml_report_v2:step4.5", f"FDR calculation failed", {"error": str(e)}, "H2")
         players_df['fdr'] = 3.0  # Default FDR
+        players_df['fdr_adjusted'] = 3.0
     
-    # Filter to only players in picks
+    # Step 4.6: REFRESH PLAYER PRICES - Critical to use latest prices for budget constraint
+    # This ensures we use the most current prices right before optimization
+    try:
+        session = create_requests_session()
+        bootstrap_response = session.get("https://fantasy.premierleague.com/api/bootstrap-static/", timeout=10)
+        if bootstrap_response.status_code == 200:
+            fresh_bootstrap = bootstrap_response.json()
+            fresh_elements = pd.DataFrame(fresh_bootstrap.get('elements', []))
+            
+            if not fresh_elements.empty and 'id' in fresh_elements.columns and 'now_cost' in fresh_elements.columns:
+                # Create a price map from fresh data
+                price_map = dict(zip(fresh_elements['id'], fresh_elements['now_cost']))
+                
+                # Store old prices for comparison (for first 5 squad players)
+                old_prices = {}
+                for pid in player_ids[:5]:
+                    if len(players_df[players_df['id'] == pid]) > 0:
+                        old_prices[pid] = players_df.loc[players_df['id'] == pid, 'now_cost'].iloc[0]
+                
+                # Update prices in players_df with fresh data
+                players_df['now_cost'] = players_df['id'].map(price_map).fillna(players_df['now_cost'])
+                
+                # Log price updates for debugging
+                price_changes = []
+                for pid, old_price in old_prices.items():
+                    new_price = price_map.get(pid)
+                    if new_price is not None and old_price != new_price:
+                        price_changes.append({"id": pid, "old": old_price, "new": new_price})
+                
+                if price_changes:
+                    debug_log("ml_report_v2.py:generate_ml_report_v2:step4.6", f"Price updates detected", {"changes": price_changes}, "H2")
+                else:
+                    debug_log("ml_report_v2.py:generate_ml_report_v2:step4.6", f"Prices refreshed (no changes detected)", {"players_refreshed": len(players_df)}, "H2")
+            else:
+                debug_log("ml_report_v2.py:generate_ml_report_v2:step4.6", f"Price refresh failed - invalid data", {}, "H2")
+        else:
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step4.6", f"Price refresh failed - API error", {"status": bootstrap_response.status_code}, "H2")
+    except Exception as e:
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step4.6", f"Price refresh exception", {"error": str(e)}, "H2")
+        # Continue with existing prices if refresh fails
+    
+    # Filter to only players in picks (AFTER price refresh)
     current_squad = players_df[players_df['id'].isin(player_ids)].copy()
     
     # #region agent log
     debug_log("ml_report_v2.py:generate_ml_report_v2:step4", f"Built squad DataFrame", {"squad_ids": sorted(current_squad['id'].tolist()), "count": len(current_squad)}, "H2")
     # #endregion
     
+    # #region agent log
+    # Log bank balance and entry info before optimization
+    try:
+        entry_response = session.get(f"https://fantasy.premierleague.com/api/entry/{entry_id}/", timeout=10)
+        if entry_response.status_code == 200:
+            entry_data = entry_response.json()
+            bank_balance = entry_data.get('last_deadline_bank', 0) / 10.0
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Bank balance from FPL API", {
+                "bank_balance": bank_balance,
+                "last_deadline_bank_raw": entry_data.get('last_deadline_bank', 0),
+                "entry_id": entry_id
+            }, "B")
+    except Exception as e:
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Failed to get bank balance", {"error": str(e)}, "B")
+    # #endregion
+    
     # Step 5: Import and use optimizer
     try:
         from .optimizer_v2 import TransferOptimizerV2
         from .report import ReportGenerator
-        from .chips import ChipEvaluator
-        
         # #region agent log
-        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Imports successful", {}, "H2")
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"About to import ChipEvaluator", {}, "H1")
         # #endregion
         
+        try:
+            from .chips import ChipEvaluator
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator import successful", {}, "H1")
+            # #endregion
+        except ImportError as e:
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator import failed", {"error": str(e), "error_type": type(e).__name__}, "H1")
+            # #endregion
+            raise
+        except SyntaxError as e:
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator syntax error", {"error": str(e), "error_type": type(e).__name__}, "H1")
+            # #endregion
+            raise
+        except Exception as e:
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator import exception", {"error": str(e), "error_type": type(e).__name__}, "H1")
+            # #endregion
+            raise
+        
         # Create optimizer
-        config = {"optimizer": {"points_hit_per_transfer": -4}}
+        config = {
+            "optimizer": {"points_hit_per_transfer": -4},
+            "chips": {
+                "min_ev_delta": 15.0,  # V5.0: Bench Boost threshold
+                "min_ev_delta_freehit": 20.0  # V5.0: Free Hit threshold
+            }
+        }
         optimizer = TransferOptimizerV2(config)
         
         # Get available players
@@ -330,12 +494,21 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             free_transfers = 1
         
         # #region agent log
-        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Before optimization", {"squad_ids": sorted(current_squad['id'].tolist()), "bank": bank, "free_transfers": free_transfers}, "H3")
+        # Log bank balance and squad value before optimization
+        squad_value_market = current_squad['now_cost'].sum() / 10.0 if not current_squad.empty else 0.0
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"Before optimization", {
+            "squad_ids": sorted(current_squad['id'].tolist()), 
+            "bank": bank, 
+            "free_transfers": free_transfers,
+            "squad_value_market": squad_value_market,
+            "total_budget_market": bank + squad_value_market
+        }, "B")
         # #endregion
         
         # Generate recommendations with CLEAN squad
+        # Pass picks_data so optimizer can use selling_price for budget calculations
         smart_recs = optimizer.generate_smart_recommendations(
-            current_squad, available_players, bank, free_transfers, max_transfers=4
+            current_squad, available_players, bank, free_transfers, max_transfers=4, picks_data=picks_data
         )
         
         # #region agent log
@@ -395,12 +568,7 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
             avail_chips = ['bboost', '3xc', 'freehit', 'wildcard']
             debug_log("ml_report_v2.py:generate_ml_report_v2:step6", f"Error getting chips, assuming all available", {"error": str(e)}, "H2")
         
-        chip_eval = ChipEvaluator(config)
-        chip_evals = chip_eval.evaluate_all_chips(
-            current_squad, players_df, gameweek, avail_chips, bank, filtered_recommendations
-        )
-        
-        # Get fixtures for updated squad display
+        # Get fixtures for chip evaluation and updated squad display
         fixtures = []
         try:
             session = create_requests_session()
@@ -410,6 +578,57 @@ def generate_ml_report_v2(entry_id: int, model_version: str = "v4.6") -> Dict:
                 debug_log("ml_report_v2.py:generate_ml_report_v2:step7", f"Fetched fixtures", {"count": len(fixtures)}, "H2")
         except Exception as e:
             debug_log("ml_report_v2.py:generate_ml_report_v2:step7", f"Failed to fetch fixtures", {"error": str(e)}, "H2")
+        
+        # Generate chip recommendations (v5.0 with LP solver)
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"About to instantiate ChipEvaluator", {"config_chips": config.get("chips", {})}, "H2")
+        # #endregion
+        
+        try:
+            chip_eval = ChipEvaluator(config)
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator instantiated successfully", {"bb_threshold": getattr(chip_eval, 'bb_threshold', 'N/A'), "tc_threshold": getattr(chip_eval, 'tc_threshold', 'N/A')}, "H2")
+            # #endregion
+        except Exception as e:
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"ChipEvaluator instantiation failed", {"error": str(e), "error_type": type(e).__name__}, "H2")
+            # #endregion
+            raise
+        
+        # #region agent log
+        debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"About to call evaluate_all_chips", {
+            "current_squad_size": len(current_squad),
+            "players_df_size": len(players_df),
+            "gameweek": gameweek,
+            "avail_chips": avail_chips,
+            "bank": bank,
+            "has_transfer_recommendations": bool(filtered_recommendations),
+            "has_fixtures": bool(fixtures)
+        }, "H3")
+        # #endregion
+        
+        try:
+            chip_evals = chip_eval.evaluate_all_chips(
+                current_squad, players_df, gameweek, avail_chips, bank, 
+                transfer_recommendations=filtered_recommendations,
+                fixtures=fixtures
+            )
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"evaluate_all_chips returned successfully", {
+                "has_best_chip": "best_chip" in chip_evals,
+                "has_evaluations": "evaluations" in chip_evals,
+                "best_chip": chip_evals.get("best_chip", "N/A")
+            }, "H3")
+            # #endregion
+        except Exception as e:
+            # #region agent log
+            debug_log("ml_report_v2.py:generate_ml_report_v2:step5", f"evaluate_all_chips failed", {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "error_args": str(e.args) if hasattr(e, 'args') else 'N/A'
+            }, "H3")
+            # #endregion
+            raise
         
         # Generate report data
         report_gen = ReportGenerator(config)

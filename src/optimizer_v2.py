@@ -64,6 +64,37 @@ class TransferOptimizerV2:
             logger.warning(f"OptimizerV2: [get_current_squad] No picks data for entry {entry_id}, gameweek {gameweek}")
             return pd.DataFrame()
         
+        # #region agent log
+        # Log picks data structure to check for selling_price
+        import json
+        sample_pick = picks_data['picks'][0] if picks_data['picks'] else {}
+        log_data = {
+            'location': 'optimizer_v2.py:get_current_squad:picks_structure',
+            'message': 'FPL API picks data structure',
+            'data': {
+                'sample_pick_keys': list(sample_pick.keys()),
+                'has_selling_price': 'selling_price' in sample_pick,
+                'sample_pick': {k: v for k, v in sample_pick.items() if k in ['element', 'selling_price', 'purchase_price', 'now_cost']} if sample_pick else {},
+                'total_picks': len(picks_data['picks'])
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'C'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
         # Extract player IDs from picks
         player_ids = [p['element'] for p in picks_data['picks']]
         logger.info(f"OptimizerV2: [get_current_squad] Raw picks from FPL API - Player IDs: {sorted(player_ids)}")
@@ -87,6 +118,48 @@ class TransferOptimizerV2:
         
         squad_df = players_df[players_df['id'].isin(player_ids)].copy()
         
+        # #region agent log
+        # Add selling_price from picks data to squad_df if available
+        if not squad_df.empty and 'picks' in picks_data:
+            picks_dict = {p['element']: p for p in picks_data['picks']}
+            selling_prices = []
+            for _, row in squad_df.iterrows():
+                pid = row['id']
+                pick_data = picks_dict.get(pid, {})
+                selling_price = pick_data.get('selling_price', None)
+                selling_prices.append(selling_price)
+            squad_df['selling_price'] = selling_prices
+            
+            # Log selling prices vs now_cost
+            price_comparison = []
+            for _, row in squad_df.iterrows():
+                price_comparison.append({
+                    'id': int(row['id']),
+                    'name': str(row.get('web_name', 'Unknown')),
+                    'now_cost': int(row.get('now_cost', 0)),
+                    'selling_price': int(row.get('selling_price', 0)) if pd.notna(row.get('selling_price')) else None,
+                    'difference': int(row.get('now_cost', 0)) - (int(row.get('selling_price', 0)) if pd.notna(row.get('selling_price')) else 0)
+                })
+            log_data = {
+                'location': 'optimizer_v2.py:get_current_squad:selling_prices',
+                'message': 'Selling prices vs market prices',
+                'data': {
+                    'price_comparison': price_comparison,
+                    'total_squad_value_market': float(squad_df['now_cost'].sum() / 10.0),
+                    'total_squad_value_selling': float(squad_df['selling_price'].sum() / 10.0) if 'selling_price' in squad_df.columns else None
+                },
+                'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+                'sessionId': 'debug-session',
+                'runId': 'run1',
+                'hypothesisId': 'A'
+            }
+            try:
+                with open('/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps(log_data) + '\n')
+            except Exception as e:
+                logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
         # FINAL VERIFICATION: Ensure no blocked players in DataFrame
         squad_ids = set(squad_df['id'].tolist()) if not squad_df.empty else set()
         blocked_found = squad_ids.intersection(BLOCKED_PLAYER_IDS)
@@ -108,7 +181,7 @@ class TransferOptimizerV2:
     
     def create_pulp_model(self, current_squad: pd.DataFrame, available_players: pd.DataFrame, 
                          bank: float, free_transfers: int, num_transfers: int, 
-                         forced_out_ids: List[int] = None) -> Tuple[pulp.LpProblem, Dict]:
+                         forced_out_ids: List[int] = None, picks_data: Dict = None) -> Tuple[pulp.LpProblem, Dict]:
         """
         Create PuLP optimization model.
         
@@ -222,16 +295,168 @@ class TransferOptimizerV2:
         prob += pulp.lpSum(transfer_in_vars.values()) == num_transfers
         
         # Budget constraint
+        # #region agent log
+        import json
+        log_data = {
+            'location': 'optimizer_v2.py:create_pulp_model:budget_constraint',
+            'message': 'Budget constraint calculation - BEFORE',
+            'data': {
+                'bank': float(bank),
+                'num_transfers': num_transfers,
+                'current_squad_ids': sorted(current_squad['id'].tolist()) if not current_squad.empty else [],
+                'available_players_count': len(available_players)
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'A'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
         cost_ins = pulp.lpSum([
             transfer_in_vars[p['id']] * price_from_api(p['now_cost']) 
             for _, p in available_players.iterrows() 
             if p['id'] in transfer_in_vars
         ])
-        val_outs = pulp.lpSum([
-            transfer_out_vars[p['id']] * price_from_api(p['now_cost']) 
-            for _, p in current_squad.iterrows() 
-            if p['id'] in transfer_out_vars
-        ])
+        # Use selling_price from picks data if available, otherwise use now_cost
+        # FPL API provides selling_price in picks data which is what you actually get when selling
+        picks_dict = {}
+        if picks_data and 'picks' in picks_data:
+            picks_dict = {p['element']: p for p in picks_data['picks']}
+        
+        # #region agent log
+        # Log which price source is being used
+        price_source_log = []
+        for _, p in current_squad.iterrows():
+            if p['id'] in transfer_out_vars:
+                pid = p['id']
+                pick_data = picks_dict.get(pid, {})
+                has_selling_price = 'selling_price' in pick_data
+                selling_price = pick_data.get('selling_price', None)
+                market_price = p.get('now_cost', 0)
+                price_source_log.append({
+                    'id': int(pid),
+                    'name': str(p.get('web_name', 'Unknown')),
+                    'market_price': int(market_price),
+                    'has_selling_price': has_selling_price,
+                    'selling_price': int(selling_price) if selling_price is not None else None,
+                    'price_difference': int(market_price) - int(selling_price) if selling_price is not None else 0
+                })
+        log_data = {
+            'location': 'optimizer_v2.py:create_pulp_model:selling_price_check',
+            'message': 'Checking selling_price availability for budget constraint',
+            'data': {
+                'price_source_log': price_source_log,
+                'picks_data_available': picks_data is not None,
+                'picks_count': len(picks_dict) if picks_dict else 0
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'A'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
+        # Calculate value_out using selling_price if available, otherwise now_cost
+        val_outs_terms = []
+        for _, p in current_squad.iterrows():
+            if p['id'] in transfer_out_vars:
+                pid = p['id']
+                pick_data = picks_dict.get(pid, {})
+                # Use selling_price from picks if available, otherwise calculate conservative estimate
+                if 'selling_price' in pick_data and pick_data['selling_price'] is not None:
+                    selling_price = price_from_api(pick_data['selling_price'])
+                    val_outs_terms.append(transfer_out_vars[pid] * selling_price)
+                else:
+                    # FPL selling price: More accurate estimate
+                    # FPL rule: Selling price = purchase_price + (market_increase / 2) if price increased
+                    # Since we don't have purchase_price, estimate based on typical price rises
+                    # Most players in active squads have risen 0.1-0.3m, so selling price is typically 0.05-0.15m less
+                    # Use 0.15m reduction per player as conservative estimate (accounts for typical rises + safety margin)
+                    market_price = price_from_api(p['now_cost'])
+                    # Reduce by 0.15m or 3%, whichever is larger
+                    # This accounts for typical price increases where you only get half the profit
+                    # Increased from 0.1m/2% to 0.15m/3% to account for actual FPL selling price calculations
+                    reduction = max(0.15, market_price * 0.03)  # At least 0.15m or 3%, whichever is larger
+                    conservative_selling_price = max(4.0, market_price - reduction)  # Minimum 4.0m
+                    val_outs_terms.append(transfer_out_vars[pid] * conservative_selling_price)
+                    
+                    # Log the price difference for debugging
+                    logger.info(f"OptimizerV2: [create_pulp_model] Player {p.get('web_name', pid)} - Market: £{market_price:.2f}m, Selling (est): £{conservative_selling_price:.2f}m, Reduction: £{reduction:.2f}m")
+        
+        val_outs = pulp.lpSum(val_outs_terms) if val_outs_terms else pulp.lpSum([0])
+        
+        # #region agent log
+        # Log individual player prices for debugging
+        player_prices_log = []
+        for _, p in current_squad.iterrows():
+            if p['id'] in transfer_out_vars:
+                player_prices_log.append({
+                    'id': int(p['id']),
+                    'name': str(p.get('web_name', 'Unknown')),
+                    'now_cost': int(p.get('now_cost', 0)),
+                    'price_from_api': price_from_api(p.get('now_cost', 0)),
+                    'has_selling_price': 'selling_price' in p
+                })
+        # Calculate val_outs value safely (pulp.value() returns None before solving)
+        val_outs_value = None
+        try:
+            if hasattr(pulp, 'value'):
+                val_outs_value = pulp.value(val_outs)
+                if val_outs_value is not None:
+                    val_outs_value = float(val_outs_value)
+        except (TypeError, ValueError):
+            val_outs_value = None
+        
+        log_data = {
+            'location': 'optimizer_v2.py:create_pulp_model:budget_constraint',
+            'message': 'Player selling prices in budget constraint',
+            'data': {
+                'players_out_prices': player_prices_log,
+                'total_val_outs_calculated': val_outs_value if val_outs_value is not None else 'N/A (not solved yet)',
+                'bank': float(bank),
+                'available_budget': float(bank) + (val_outs_value if val_outs_value is not None else 0)
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'A'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
         prob += cost_ins <= float(bank) + val_outs
         
         # Position constraints
@@ -287,7 +512,7 @@ class TransferOptimizerV2:
         }
     
     def solve_transfer_optimization(self, current_squad, available_players, bank, free_transfers, 
-                                   num_transfers, forced_out_ids=None):
+                                   num_transfers, forced_out_ids=None, picks_data=None):
         """
         Solve transfer optimization problem.
         
@@ -296,7 +521,7 @@ class TransferOptimizerV2:
         logger.info(f"OptimizerV2: [solve_transfer_optimization] Solving for {num_transfers} transfers")
         
         prob, variables = self.create_pulp_model(
-            current_squad, available_players, bank, free_transfers, num_transfers, forced_out_ids
+            current_squad, available_players, bank, free_transfers, num_transfers, forced_out_ids, picks_data
         )
         
         prob.solve(self.pulp_solver)
@@ -424,6 +649,105 @@ class TransferOptimizerV2:
         logger.info(f"OptimizerV2: [solve_transfer_optimization] Players OUT: {[p['name'] + '(' + str(p['id']) + ')' for p in players_out]}")
         logger.info(f"OptimizerV2: [solve_transfer_optimization] Players IN: {[p['name'] + '(' + str(p['id']) + ')' for p in players_in]}")
         
+        # CRITICAL: Validate budget constraint using fresh prices
+        from .utils import price_from_api
+        # #region agent log
+        import json
+        players_in_prices = [{'id': p.get('id'), 'name': p.get('name', 'Unknown'), 'now_cost': p.get('now_cost', 0), 'price': price_from_api(p.get('now_cost', 0))} for p in players_in]
+        players_out_prices = [{'id': p.get('id'), 'name': p.get('name', 'Unknown'), 'now_cost': p.get('now_cost', 0), 'price': price_from_api(p.get('now_cost', 0)), 'has_selling_price': 'selling_price' in p} for p in players_out]
+        log_data = {
+            'location': 'optimizer_v2.py:solve_transfer_optimization:budget_validation',
+            'message': 'Budget validation - BEFORE calculation',
+            'data': {
+                'bank': float(bank),
+                'players_in': players_in_prices,
+                'players_out': players_out_prices,
+                'num_transfers': len(players_in)
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'A'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
+        total_cost_in = sum(price_from_api(p['now_cost']) for p in players_in)
+        
+        # Calculate total_value_out using selling_price calculation
+        # FPL selling price: Conservative estimate (95% of market price) since we don't have purchase_price
+        picks_dict = {}
+        if picks_data and 'picks' in picks_data:
+            picks_dict = {p['element']: p for p in picks_data['picks']}
+        
+        total_value_out = 0.0
+        for p in players_out:
+            pid = p.get('id')
+            pick_data = picks_dict.get(pid, {})
+            market_price = price_from_api(p.get('now_cost', 0))
+            
+            if 'selling_price' in pick_data and pick_data['selling_price'] is not None:
+                total_value_out += price_from_api(pick_data['selling_price'])
+            else:
+                # More accurate estimate: Reduce by 0.15m or 3%, whichever is larger
+                # FPL rule: Selling price = purchase_price + (market_increase / 2)
+                # Most players in active squads have risen 0.1-0.3m, so selling price is typically 0.05-0.15m less
+                # Use 0.15m reduction per player as conservative estimate (increased from 0.1m to account for actual FPL calculations)
+                reduction = max(0.15, market_price * 0.03)  # At least 0.15m or 3%, whichever is larger
+                conservative_selling_price = max(4.0, market_price - reduction)  # Minimum 4.0m
+                total_value_out += conservative_selling_price
+                logger.info(f"OptimizerV2: [solve_transfer_optimization] Budget validation - Player {p.get('name', pid)} - Market: £{market_price:.2f}m, Selling (est): £{conservative_selling_price:.2f}m, Reduction: £{reduction:.2f}m")
+        
+        available_budget = float(bank) + total_value_out
+        
+        # #region agent log
+        log_data = {
+            'location': 'optimizer_v2.py:solve_transfer_optimization:budget_validation',
+            'message': 'Budget validation - AFTER calculation',
+            'data': {
+                'total_cost_in': float(total_cost_in),
+                'total_value_out': float(total_value_out),
+                'bank': float(bank),
+                'available_budget': float(available_budget),
+                'budget_deficit': float(total_cost_in) - float(available_budget),
+                'is_feasible': total_cost_in <= available_budget + 0.01
+            },
+            'timestamp': int(pd.Timestamp.now().timestamp() * 1000),
+            'sessionId': 'debug-session',
+            'runId': 'run1',
+            'hypothesisId': 'A'
+        }
+        try:
+            import os
+            # Use server-accessible path (Windows: C:\fpl-api\debug.log, Linux/Mac: workspace/.cursor/debug.log)
+            if os.name == 'nt':  # Windows
+                debug_log_path = r'C:\fpl-api\debug.log'
+            else:
+                debug_log_path = '/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/.cursor/debug.log'
+            with open(debug_log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except Exception as e:
+            logger.error(f"Debug log write failed: {e}")
+        # #endregion
+        
+        if total_cost_in > available_budget + 0.01:  # Allow 0.01 tolerance for floating point
+            logger.error(f"OptimizerV2: [solve_transfer_optimization] BUDGET CONSTRAINT VIOLATION!")
+            logger.error(f"OptimizerV2: [solve_transfer_optimization] Cost IN: {total_cost_in:.2f}, Available: {available_budget:.2f}, Bank: {bank:.2f}, Value OUT: {total_value_out:.2f}")
+            logger.error(f"OptimizerV2: [solve_transfer_optimization] This indicates prices may have changed. Returning infeasible.")
+            return {'status': 'infeasible', 'net_ev_gain_adjusted': -999, 'error': 'Budget constraint violation - prices may have changed'}
+        
+        logger.info(f"OptimizerV2: [solve_transfer_optimization] Budget validation passed: Cost IN: {total_cost_in:.2f}, Available: {available_budget:.2f}")
+        
         # Calculate net EV gain
         current_ev = current_squad['EV'].sum()
         final_ev = pulp.value(prob.objective) + (max(0, num_transfers - free_transfers) * abs(self.points_hit_per_transfer))
@@ -435,10 +759,13 @@ class TransferOptimizerV2:
             'players_out': players_out,
             'players_in': players_in,
             'net_ev_gain': net_gain,
-            'net_ev_gain_adjusted': net_gain - (max(0, num_transfers - free_transfers) * abs(self.points_hit_per_transfer))
+            'net_ev_gain_adjusted': net_gain - (max(0, num_transfers - free_transfers) * abs(self.points_hit_per_transfer)),
+            'total_cost_in': total_cost_in,
+            'total_value_out': total_value_out,
+            'available_budget': available_budget
         }
     
-    def generate_smart_recommendations(self, current_squad, available_players, bank, free_transfers, max_transfers: int = 4):
+    def generate_smart_recommendations(self, current_squad, available_players, bank, free_transfers, max_transfers: int = 4, picks_data: Dict = None):
         """
         Generate comprehensive transfer recommendations.
         
@@ -486,7 +813,7 @@ class TransferOptimizerV2:
         if num_forced > 0:
             try:
                 sol = self.solve_transfer_optimization(
-                    current_squad, available_players, bank, free_transfers, num_forced, forced_out_ids=forced_ids
+                    current_squad, available_players, bank, free_transfers, num_forced, forced_out_ids=forced_ids, picks_data=picks_data
                 )
                 if sol.get('status') == 'optimal':
                     penalty_hits = max(0, num_forced-free_transfers)
@@ -512,7 +839,7 @@ class TransferOptimizerV2:
                 continue
             try:
                 sol = self.solve_transfer_optimization(
-                    current_squad, available_players, bank, free_transfers, tx
+                    current_squad, available_players, bank, free_transfers, tx, picks_data=picks_data
                 )
                 if sol.get('status') == 'optimal' and sol.get('net_ev_gain_adjusted', -999) >= 0.1:
                     penalty_hits = max(0, tx-free_transfers)

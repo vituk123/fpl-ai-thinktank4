@@ -60,6 +60,13 @@ export interface Recommendation {
   reasoning: string;
 }
 
+export interface TeamSearchResult {
+  team_id: number;
+  team_name: string;
+  manager_name: string;
+  similarity: number;
+}
+
 export interface MLReport {
   header: {
     manager: string;

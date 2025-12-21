@@ -1028,24 +1028,28 @@ class LiveGameweekTracker:
                 team_name = team_data.get('short_name') or team_data.get('name') or 'Unknown'
                 
                 # Get player points and status
-                # Try to get current gameweek minutes from element-summary if available
-                points = element.get('event_points', 0)
+                # Always get current gameweek points from element-summary (not event_points which is season total)
+                points = 0
                 minutes = 0
                 
-                # Try to get actual gameweek minutes from element-summary
+                # Try to get actual gameweek points and minutes from element-summary
                 # Use actual_gameweek (the GW we got picks for) not the requested gameweek
                 try:
-                    element_summary = self.api_client._request(f"element-summary/{player_id}/", use_cache=False)
+                    element_summary = self.api_client._request(f"element-summary/{player_id}/", use_cache=True)  # Enable cache for performance
                     history = element_summary.get('history', [])
                     current_gw_data = next((h for h in history if h.get('round') == actual_gameweek), None)
                     if current_gw_data:
                         minutes = current_gw_data.get('minutes', 0)
-                        # Also get points from history if event_points is 0
-                        if points == 0:
-                            points = current_gw_data.get('total_points', 0)
-                except:
-                    # Fallback: use total minutes (not ideal but better than nothing)
-                    minutes = element.get('minutes', 0)
+                        points = current_gw_data.get('total_points', 0)  # Always use current GW points
+                    else:
+                        # If no data for this gameweek yet, use 0 (player hasn't played)
+                        points = 0
+                        minutes = 0
+                except Exception as e:
+                    logger.debug(f"Error getting element-summary for player {player_id}: {e}")
+                    # Fallback: use 0 (we can't determine current GW points without element-summary)
+                    points = 0
+                    minutes = 0
                 
                 position = pick['position']
                 is_captain = pick.get('is_captain', False)

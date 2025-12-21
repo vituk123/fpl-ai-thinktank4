@@ -1,0 +1,56 @@
+INFO:__main__:Starting Full Ingestion of 10 seasons...
+INFO:__main__:Seasons: 2016-17, 2017-18, 2018-19, 2019-20, 2020-21, 2021-22, 2022-23, 2023-24, 2024-25, 2025-26
+INFO:__main__:Resetting history tables...
+INFO:database:History tables dropped. Recreating with new schema...
+INFO:httpx:HTTP Request: GET https://sdezcbesdubplacfxibc.supabase.co/rest/v1/current_season_history?select=player_id&limit=1 "HTTP/2 404 Not Found"
+WARNING:database:Could not create user_credentials table: 'DatabaseManager' object has no attribute 'get_connection'
+INFO:database:Database tables created/verified via PostgreSQL.
+INFO:__main__:Processing 2016-17...
+INFO:__main__:  Processed 38 gameweeks, 23679 total records
+INFO:database:Saved 23679 archived records.
+INFO:__main__:  ✓ 2016-17: Added 23679 records
+INFO:__main__:Processing 2017-18...
+INFO:__main__:  Processed 38 gameweeks, 22467 total records
+INFO:database:Saved 22467 archived records.
+INFO:__main__:  ✓ 2017-18: Added 39023 records
+INFO:__main__:Processing 2018-19...
+INFO:__main__:  Processed 38 gameweeks, 21790 total records
+INFO:database:Saved 21790 archived records.
+INFO:__main__:  ✓ 2018-19: Added 46155 records
+INFO:__main__:Processing 2019-20...
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:101: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  full_df = pd.concat(season_data, ignore_index=True)
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:154: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  clean = clean.fillna(0)
+INFO:__main__:  Processed 38 gameweeks, 16556 total records
+INFO:database:Saved 16556 archived records.
+INFO:__main__:  ✓ 2019-20: Added 16556 records
+INFO:__main__:Processing 2020-21...
+INFO:__main__:  Processed 38 gameweeks, 24365 total records
+INFO:database:Saved 24365 archived records.
+INFO:__main__:  ✓ 2020-21: Added 24365 records
+INFO:__main__:Processing 2021-22...
+INFO:__main__:  Processed 38 gameweeks, 25447 total records
+INFO:database:Saved 25447 archived records.
+INFO:__main__:  ✓ 2021-22: Added 51952 records
+INFO:__main__:Processing 2022-23...
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:101: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  full_df = pd.concat(season_data, ignore_index=True)
+/Users/vitumbikokayuni/Documents/fpl-ai-thinktank4/src/ingest_history.py:154: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  clean = clean.fillna(0)
+INFO:__main__:  Processed 38 gameweeks, 26505 total records
+INFO:database:Saved 26505 archived records.
+INFO:__main__:  ✓ 2022-23: Added 56230 records
+INFO:__main__:Processing 2023-24...
+INFO:__main__:  Processed 38 gameweeks, 29725 total records
+INFO:database:Saved 29725 archived records.
+INFO:__main__:  ✓ 2023-24: Added 57330 records
+INFO:__main__:Processing 2024-25...
+INFO:__main__:  Processed 38 gameweeks, 27605 total records
+INFO:database:Saved 27605 archived records.
+INFO:__main__:  ✓ 2024-25: Added 33426 records
+INFO:__main__:Processing 2025-26...
+INFO:__main__:  Processed 8 gameweeks, 5821 total records
+INFO:database:Saved 5821 archived records.
+INFO:__main__:  ✓ 2025-26: Added 5821 records
+INFO:__main__:Total records ingested: 354537
