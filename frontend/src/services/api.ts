@@ -223,36 +223,14 @@ export const teamSearchApi = {
       const matches = response.data?.data?.matches || response.data?.matches || [];
       return matches;
     } catch (error: any) {
-      console.error('Error searching teams:', error);
-      
-      // Fallback to Supabase if server search fails (suppress errors if Supabase also fails)
-      try {
-        console.warn('Team search: Server search failed, trying Supabase fallback');
-        const response = await supabaseClient.get(`/search-teams?q=${encodeURIComponent(query.trim())}`, {
-          timeout: 10000
-        });
-        return response.data?.matches || [];
-      } catch (fallbackError: any) {
-        // Silently fail - Supabase endpoint is known to have issues
-        // Don't log error to console to prevent error spam
-        if (fallbackError.response?.status !== 500) {
-          console.warn('Team search: Supabase fallback also failed');
-        }
+      // Server search failed - don't use Supabase fallback as it's broken (500 errors)
+      // Silently return empty array to prevent error spam in console
+      // Only log non-network errors for debugging
+      if (error.response?.status && error.response.status !== 404 && error.code !== 'ERR_NETWORK' && !error.message?.includes('ERR_CONNECTION')) {
+        console.debug('Team search: Server search unavailable', error.response.status);
       }
       
       // Return empty array on error (don't throw - let UI handle gracefully)
-      if (error.response?.status === 400) {
-        // Invalid query - return empty
-        return [];
-      }
-      
-      // Log but don't throw for network errors
-      if (error.code === 'ERR_NETWORK' || error.message?.includes('ERR_CONNECTION')) {
-        console.warn('Team search: Network error, returning empty results');
-        return [];
-      }
-      
-      // For other errors, return empty array
       return [];
     }
   }
