@@ -87,10 +87,13 @@ const getByteHostyProxyUrl = (path: string): string => {
   if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
     // Use Vercel proxy when on HTTPS
     // Map specific paths to their proxy endpoints
-    if (path === 'ml/report') {
+    if (path.startsWith('ml/report')) {
       return '/api/proxy/ml/report';
     }
-    // For other paths, use the catch-all (if it works) or create specific routes
+    if (path.startsWith('search/teams')) {
+      return '/api/proxy/search/teams';
+    }
+    // For other paths, use the catch-all
     return `/api/proxy/${path}`;
   }
   // Direct connection when on HTTP (local dev)
