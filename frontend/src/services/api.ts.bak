@@ -96,9 +96,17 @@ const getByteHostyProxyUrl = (path: string): string => {
       return `/api/v1/${path}`;
     }
     
-    // If on HTTPS (Vercel), use direct HTTP connection (CORS is enabled on backend)
-    // Vercel proxy is disabled - always use direct connection
-    return `http://198.23.185.233:8080/api/v1/${path}`;
+    // If on HTTPS (Vercel), use proxy (but this shouldn't happen if frontend is on ByteHosty)
+    if (window.location.protocol === 'https:') {
+      // Use Vercel proxy when on HTTPS
+      if (path.startsWith('ml/report')) {
+        return '/api/proxy/ml/report';
+      }
+      if (path.startsWith('search/teams')) {
+        return '/api/proxy/search/teams';
+      }
+      return `/api/proxy/${path}`;
+    }
   }
   
   // Fallback: Direct connection (for local dev or other scenarios)
@@ -115,10 +123,7 @@ const callDashboardEndpoint = async (endpoint: string, params?: Record<string, a
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
     const url = getByteHostyProxyUrl(cleanEndpoint) + queryString;
     const response = await axios.get(url, {
-      timeout: 60000, // 60 second timeout (increased for slow database queries)
-      headers: {
-        'Accept': 'application/json',
-      }
+      timeout: 30000 // 30 second timeout (increased for slow database queries)
     });
     return response.data;
   } catch (bytehostyError: any) {
@@ -158,10 +163,7 @@ export const entryApi = {
     try {
       const url = getByteHostyProxyUrl(`entry/${entryId}/info`);
       const response = await axios.get(url, {
-        timeout: 30000, // Increased from 10s to 30s
-        headers: {
-          'Accept': 'application/json',
-        }
+        timeout: 10000
       });
       // Handle both direct data and StandardResponse format
       return response.data?.data || response.data;
@@ -220,7 +222,7 @@ export const entryApi = {
 };
 
 export const teamSearchApi = {
-  searchTeams: async (query: string, signal?: AbortSignal): Promise<TeamSearchResult[]> => {
+  searchTeams: async (query: string): Promise<TeamSearchResult[]> => {
     if (!query || query.trim().length === 0) {
       return [];
     }
@@ -228,24 +230,25 @@ export const teamSearchApi = {
     try {
       // Use ByteHosty server for team search (CSV file is stored on server)
       // The endpoint is /api/v1/search/teams on the server
-      // First request may take 60-90 seconds to load 10M+ records into memory
       const url = getByteHostyProxyUrl(`search/teams?q=${encodeURIComponent(query.trim())}&limit=20`);
       const response = await axios.get(url, {
-        timeout: 120000, // 120 seconds timeout for first request (data loading)
-        signal // Support request cancellation
+        timeout: 10000
       });
       
       // Handle StandardResponse format: { data: { matches: TeamSearchResult[] }, meta: {...} }
       const matches = response.data?.data?.matches || response.data?.matches || [];
       return matches;
     } catch (error: any) {
-      // Ignore abort errors (expected when cancelling)
-      if (error.name === 'AbortError' || error.name === 'CanceledError' || axios.isCancel(error)) {
+      // Server search failed - try Supabase fallback if available
+      try {
+        const response = await supabaseClient.get(`/search-teams?q=${encodeURIComponent(query.trim())}`, {
+          timeout: 10000
+        });
+        return response.data?.matches || [];
+      } catch (fallbackError: any) {
+        // Both server and Supabase failed - silently return empty array
         return [];
       }
-      // Server search failed - return empty array (don't use Supabase fallback to avoid 500 errors)
-      console.debug('Team search: Server search failed', error?.message);
-      return [];
     }
   }
 };
@@ -357,23 +360,22 @@ export const mlApi = {
     return { players: [] };
   },
   getMLReport: async (entryId: number, gameweek: number | undefined, fastMode: boolean = true): Promise<MLReport> => {
-    // Debug logging disabled in production
     // #region agent log
+    // Debug logging disabled in production
     // const logEndpoint = 'http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82';
-    // const runId = `api_${Date.now()}`;
+    const runId = `api_${Date.now()}`;
     const logData = (location: string, message: string, data: any, hypothesisId: string) => {
-      // Debug logging disabled in production
-      // fetch(logEndpoint, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ sessionId: 'debug-session', runId, hypothesisId, location, message, data, timestamp: Date.now() })
-      // }).catch(() => {});
+      fetch(logEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'debug-session', runId, hypothesisId, location, message, data, timestamp: Date.now() })
+      }).catch(() => {});
     };
-    // logData('api.ts:getMLReport:entry', 'getMLReport called', { entryId, gameweek, fastMode }, 'H');
+    logData('api.ts:getMLReport:entry', 'getMLReport called', { entryId, gameweek, fastMode }, 'H');
     // #endregion
     
-    // Always use ByteHosty (direct connection when on same origin, no proxy needed)
-    console.log('mlApi.getMLReport: Calling ByteHosty server');
+    // Always use ByteHosty (via proxy on HTTPS, direct on HTTP)
+    console.log('mlApi.getMLReport: Calling ByteHosty server via proxy');
     
     const params: any = {
       entry_id: entryId,
@@ -385,12 +387,11 @@ export const mlApi = {
       params.gameweek = gameweek;
     }
     
-    // Debug logging disabled in production
     // #region agent log
-    // logData('api.ts:getMLReport:before_bytehosty', 'Before ByteHosty API call', {
-    //   url: getByteHostyProxyUrl('ml/report'),
-    //   params
-    // }, 'I');
+    logData('api.ts:getMLReport:before_bytehosty', 'Before ByteHosty API call', {
+      url: getByteHostyProxyUrl('ml/report'),
+      params
+    }, 'I');
     // #endregion
     
     try {
@@ -409,14 +410,13 @@ export const mlApi = {
         }
       });
       
-      // Debug logging disabled in production
       // #region agent log
-      // logData('api.ts:getMLReport:after_bytehosty', 'After ByteHosty API call', {
-      //   status: response.status,
-      //   response_gameweek: response.data?.data?.header?.gameweek || response.data?.header?.gameweek,
-      //   has_data: !!response.data?.data,
-      //   response_keys: response.data ? Object.keys(response.data) : []
-      // }, 'J');
+      logData('api.ts:getMLReport:after_bytehosty', 'After ByteHosty API call', {
+        status: response.status,
+        response_gameweek: response.data?.data?.header?.gameweek || response.data?.header?.gameweek,
+        has_data: !!response.data?.data,
+        response_keys: response.data ? Object.keys(response.data) : []
+      }, 'J');
       // #endregion
       
       const responseData = response.data;
@@ -437,13 +437,12 @@ export const mlApi = {
       console.log('mlApi.getMLReport: Returning root data, gameweek:', responseData?.header?.gameweek);
       return responseData;
     } catch (error: any) {
-      // Debug logging disabled in production
       // #region agent log
-      // logData('api.ts:getMLReport:bytehosty_error', 'ByteHosty error', {
-      //   error_message: error.message,
-      //   error_status: error.response?.status,
-      //   error_code: error.code
-      // }, 'K');
+      logData('api.ts:getMLReport:bytehosty_error', 'ByteHosty error', {
+        error_message: error.message,
+        error_status: error.response?.status,
+        error_code: error.code
+      }, 'K');
       // #endregion
       
       console.error('mlApi.getMLReport: ByteHosty server error:', error.message);

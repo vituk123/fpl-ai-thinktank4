@@ -1,10 +1,12 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Radio, Zap, Newspaper } from 'lucide-react';
+import { usePrefetch } from '../../hooks/usePrefetch';
 
 const Dock: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { prefetchRoute } = usePrefetch();
 
   const items = [
     { icon: Home, label: 'Home', path: '/' },
@@ -22,6 +24,7 @@ const Dock: React.FC = () => {
             <button
               key={item.label}
               onClick={() => navigate(item.path)}
+              onMouseEnter={() => prefetchRoute(item.path)}
               className={`
                 group flex flex-col items-center justify-center p-2
                 transition-transform duration-200 hover:-translate-y-2

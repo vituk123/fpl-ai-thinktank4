@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../../context/AppContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Battery, Wifi, Menu, X } from 'lucide-react';
+import { usePrefetch } from '../../hooks/usePrefetch';
 
 const MacMenuBar: React.FC = () => {
   const { entryInfo, logout, isAuthenticated } = useAppContext();
   const navigate = useNavigate();
   const location = useLocation();
+  const { prefetchRoute } = usePrefetch();
   const [time, setTime] = useState(new Date());
   const [isMobile, setIsMobile] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -66,15 +68,16 @@ const MacMenuBar: React.FC = () => {
         <div className="flex items-center h-full overflow-visible">
         {/* Logo / Home */}
           <button onClick={() => navigate(isAuthenticated ? '/dashboard' : '/')} className="flex items-center justify-center hover:opacity-80 transition-opacity overflow-hidden p-0 m-0" style={{ clipPath: 'inset(0 0 0 0)' }}>
-              <img src="/logo1.png" alt="FPL OPTIMIZER" className="h-[204px] w-auto" style={{ marginTop: '-100px', marginBottom: '-84px', marginLeft: '-20px', marginRight: '0', display: 'block' }} />
+              <img src="/logo1.png" alt="FPL OPTIMIZER" width="1024" height="1024" loading="eager" className="h-[204px] w-auto" style={{ marginTop: '-100px', marginBottom: '-84px', marginLeft: '-20px', marginRight: '0', display: 'block' }} />
         </button>
         {isAuthenticated && (
               <nav className="hidden md:flex space-x-6 h-full items-center ml-4">
-                <div className="relative group h-full flex items-center cursor-pointer">
+                <div className="relative group h-full flex items-center cursor-pointer" onMouseEnter={() => { prefetchRoute('/dashboard'); prefetchRoute('/live'); }}>
                     <span className="font-bold text-sm">Dashboard</span>
                     <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px] z-50">
                         <button 
                           onClick={() => navigate('/dashboard')} 
+                          onMouseEnter={() => prefetchRoute('/dashboard')}
                           onTouchStart={(e) => {
                             e.stopPropagation();
                             navigate('/dashboard');
@@ -86,6 +89,7 @@ const MacMenuBar: React.FC = () => {
                         </button>
                         <button 
                           onClick={() => navigate('/live')} 
+                          onMouseEnter={() => prefetchRoute('/live')}
                           onTouchStart={(e) => {
                             e.stopPropagation();
                             navigate('/live');
@@ -97,11 +101,12 @@ const MacMenuBar: React.FC = () => {
                         </button>
                     </div>
                 </div>
-                 <div className="relative group h-full flex items-center cursor-pointer">
+                 <div className="relative group h-full flex items-center cursor-pointer" onMouseEnter={() => prefetchRoute('/recommendations')}>
                     <span className="font-bold text-sm">Optimize</span>
                     <div className="absolute top-full left-0 bg-white border-retro border-retro-primary shadow-retro hidden group-hover:block min-w-[150px] z-50">
                         <button 
                           onClick={() => navigate('/recommendations')} 
+                          onMouseEnter={() => prefetchRoute('/recommendations')}
                           onTouchStart={(e) => {
                             e.stopPropagation();
                             navigate('/recommendations');
@@ -154,7 +159,7 @@ const MacMenuBar: React.FC = () => {
           className="flex items-center justify-center hover:opacity-80 active:opacity-60 transition-opacity flex-shrink-0 overflow-visible p-0 m-0 touch-manipulation"
           style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent', minWidth: '60px' }}
         >
-          <img src="/logo1.png" alt="FPL OPTIMIZER" className="h-[204px] w-auto" style={{ marginTop: '-100px', marginBottom: '-84px', marginLeft: '-20px', marginRight: '0' }} />
+          <img src="/logo1.png" alt="FPL OPTIMIZER" width="1024" height="1024" loading="eager" className="h-[204px] w-auto" style={{ marginTop: '-100px', marginBottom: '-84px', marginLeft: '-20px', marginRight: '0' }} />
         </button>
 
         {/* Status elements - between logo and menu button */}
@@ -232,6 +237,7 @@ const MacMenuBar: React.FC = () => {
                     navigate(item.href);
                     setIsMenuOpen(false);
                   }}
+                  onMouseEnter={() => prefetchRoute(item.href)}
                   onTouchStart={(e) => {
                     e.stopPropagation();
                     navigate(item.href);

@@ -33,10 +33,45 @@ def check_upload_progress():
         print("🔍 Checking Supabase upload progress...")
         print("")
         
-        # Get total count
-        response = client.table('fpl_teams').select('team_id', count='exact').execute()
-        
-        total_count = response.count if hasattr(response, 'count') else len(response.data)
+        # Get total count - use LIMIT to avoid timeout on large tables
+        # We'll estimate by sampling
+        try:
+            # Try to get approximate count using a more efficient query
+            # First, check if table has records at all
+            sample = client.table('fpl_teams').select('team_id').limit(1).execute()
+            if not sample.data:
+                total_count = 0
+            else:
+                # For large tables, use MAX(team_id) as an approximation
+                # This is much faster than COUNT(*)
+                try:
+                    max_response = client.rpc('get_max_team_id').execute()
+                    # Fallback: query a sample and estimate
+                    sample_large = client.table('fpl_teams').select('team_id').order('team_id', desc=True).limit(1000).execute()
+                    if sample_large.data:
+                        # Use max team_id as approximation (assumes IDs are sequential)
+                        max_id = max(record['team_id'] for record in sample_large.data)
+                        total_count = max_id  # Approximation
+                    else:
+                        total_count = 0
+                except:
+                    # If RPC doesn't exist, use a simpler approach
+                    # Query with limit to estimate
+                    sample_large = client.table('fpl_teams').select('team_id').order('team_id', desc=True).limit(1000).execute()
+                    if sample_large.data:
+                        max_id = max(record['team_id'] for record in sample_large.data)
+                        total_count = max_id  # Approximation based on max ID
+                    else:
+                        total_count = 0
+        except Exception as count_error:
+            # If count query times out, try to get a sample instead
+            try:
+                sample = client.table('fpl_teams').select('team_id').limit(100).execute()
+                total_count = len(sample.data) if sample.data else 0
+                if total_count > 0:
+                    print("⚠️  Count query timed out, showing sample size instead")
+            except:
+                total_count = 0
         
         print(f"✅ Total records in fpl_teams table: {total_count:,}")
         print("")

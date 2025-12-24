@@ -19,6 +19,21 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        outDir: 'dist',
+        assetsDir: 'assets',
+        // Ensure assets are referenced correctly when served from root
+        base: '/',
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+              'chart-vendor': ['recharts'],
+              'animation-vendor': ['gsap'],
+            },
+          },
+        },
       }
     };
 });

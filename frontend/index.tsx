@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './src/index.css';
 import App from './App';
+import * as serviceWorker from './src/serviceWorker';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,3 +15,11 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Register service worker in production
+if (import.meta.env.PROD) {
+  serviceWorker.register();
+} else {
+  // Unregister service worker in development
+  serviceWorker.unregister();
+}

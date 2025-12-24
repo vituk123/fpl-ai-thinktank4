@@ -6,11 +6,14 @@ import logging
 from typing import Optional, List, Dict, Tuple, Union
 from fastapi import FastAPI, HTTPException, Query, Path as PathParam, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 # BaseHTTPMiddleware removed - no longer needed
 # StarletteRequest removed - no longer needed
 from starlette.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 import json
 from pydantic import BaseModel, ValidationError
 import yaml
@@ -202,20 +205,141 @@ team_search: Optional[TeamSearch] = None
 @app.on_event("startup")  # type: ignore
 async def startup_event():
     """Initialize clients on startup"""
+    import json
+    import time
+    log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+    
+    # #region agent log
+    log_data = {
+        "location": "dashboard_api.py:204",
+        "message": "Startup event beginning",
+        "data": {},
+        "timestamp": int(time.time() * 1000),
+        "sessionId": "debug-session",
+        "runId": "run1",
+        "hypothesisId": "A"
+    }
+    try:
+        with open(log_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(log_data) + '\n')
+    except:
+        pass
+    # #endregion
+    
     global dashboard, db_manager, api_client, config, team_search
     try:
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:220",
+            "message": "Loading config",
+            "data": {},
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
+        
         config = load_config()
+        
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:235",
+            "message": "Config loaded, initializing FPLAPIClient",
+            "data": {"cache_dir": config.get('cache', {}).get('cache_dir', '.cache')},
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
         
         # Initialize API client
         cache_dir = config.get('cache', {}).get('cache_dir', '.cache')
         api_client = FPLAPIClient(cache_dir=cache_dir)
         
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:250",
+            "message": "FPLAPIClient initialized, initializing DatabaseManager",
+            "data": {},
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
+        
         # Initialize database manager (optional)
         db_manager = None
         try:
             db_manager = DatabaseManager()
+            # #region agent log
+            log_data = {
+                "location": "dashboard_api.py:265",
+                "message": "DatabaseManager initialized successfully",
+                "data": {},
+                "timestamp": int(time.time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(log_data) + '\n')
+            except:
+                pass
+            # #endregion
         except Exception as e:
+            # #region agent log
+            log_data = {
+                "location": "dashboard_api.py:275",
+                "message": "DatabaseManager initialization failed",
+                "data": {"error": str(e), "error_type": type(e).__name__},
+                "timestamp": int(time.time() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(log_data) + '\n')
+            except:
+                pass
+            # #endregion
             logger.warning(f"Database not available: {e}")
+        
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:290",
+            "message": "Initializing VisualizationDashboard",
+            "data": {},
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
         
         # Initialize dashboard
         dashboard = VisualizationDashboard(
@@ -223,9 +347,76 @@ async def startup_event():
             db_manager=db_manager,
         )
         
+        # Initialize team search (for server-side CSV search)
+        global team_search
+        team_search = None  # Initialize to None first
+        if TEAM_SEARCH_AVAILABLE:
+            try:
+                import platform
+                if platform.system() == 'Windows':
+                    csv_path = r"C:\fpl-api\fpl_teams_full.csv"
+                else:
+                    csv_path = "/opt/fpl-api/fpl_teams_full.csv"
+                
+                logger.info(f"Attempting to initialize team search with CSV: {csv_path}")
+                if os.path.exists(csv_path):
+                    logger.info(f"CSV file found, creating TeamSearch instance...")
+                    team_search = TeamSearch(csv_path)
+                    logger.info(f"Team search initialized successfully with CSV: {csv_path}")
+                else:
+                    logger.warning(f"Team search CSV not found at {csv_path}, team search will be unavailable")
+                    team_search = None
+            except Exception as e:
+                logger.error(f"Team search initialization failed: {e}", exc_info=True)
+                team_search = None
+        else:
+            logger.warning("TEAM_SEARCH_AVAILABLE is False, team search will be unavailable")
+            team_search = None
+        
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:305",
+            "message": "VisualizationDashboard initialized, startup complete",
+            "data": {},
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
+        
         logger.info("Dashboard API initialized successfully")
     except Exception as e:
-        logger.error(f"Error initializing dashboard: {e}")
+        # #region agent log
+        log_data = {
+            "location": "dashboard_api.py:320",
+            "message": "Startup event exception",
+            "data": {
+                "error": str(e),
+                "error_type": type(e).__name__
+            },
+            "timestamp": int(time.time() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            import traceback
+            log_data["data"]["traceback"] = traceback.format_exc()[:1000]
+        except:
+            pass
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_data) + '\n')
+        except:
+            pass
+        # #endregion
+        logger.error(f"Error initializing dashboard: {e}", exc_info=True)
         raise
 
 
@@ -400,10 +591,43 @@ async def search_teams(
     Search FPL teams by team name or manager name.
     Searches the CSV file stored on the server.
     """
+    global team_search
+    
+    # Try to initialize team_search if it's None (fallback if startup initialization failed)
+    logger.info(f"Search endpoint called: team_search={team_search is not None}, TEAM_SEARCH_AVAILABLE={TEAM_SEARCH_AVAILABLE}")
+    
+    if not team_search and TEAM_SEARCH_AVAILABLE:
+        try:
+            import platform
+            if platform.system() == 'Windows':
+                csv_path = r"C:\fpl-api\fpl_teams_full.csv"
+            else:
+                csv_path = "/opt/fpl-api/fpl_teams_full.csv"
+            
+            logger.info(f"Attempting to initialize team_search. CSV path: {csv_path}, exists: {os.path.exists(csv_path)}")
+            
+            if os.path.exists(csv_path):
+                logger.info(f"Initializing team_search on-demand from search endpoint: {csv_path}")
+                team_search = TeamSearch(csv_path)
+                logger.info(f"TeamSearch object created. Now loading data...")
+                # Trigger data loading by calling search (which will load data if needed)
+                # But first, let's just initialize - the search call below will load data
+                logger.info(f"Team search initialized on-demand successfully")
+            else:
+                logger.warning(f"Team search CSV not found at {csv_path}")
+        except Exception as e:
+            logger.error(f"Failed to initialize team_search on-demand: {e}", exc_info=True)
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
     if not team_search:
+        import platform
+        csv_path = r"C:\fpl-api\fpl_teams_full.csv" if platform.system() == 'Windows' else "/opt/fpl-api/fpl_teams_full.csv"
+        csv_exists = os.path.exists(csv_path)
+        error_detail = f"Team search not available. TEAM_SEARCH_AVAILABLE={TEAM_SEARCH_AVAILABLE}, CSV path={csv_path}, CSV exists={csv_exists}"
         raise HTTPException(
             status_code=503, 
-            detail="Team search is not available. The CSV file may not be loaded on the server."
+            detail=error_detail
         )
     
     if not q or not q.strip():
@@ -413,7 +637,9 @@ async def search_teams(
         )
     
     try:
+        logger.info(f"Calling team_search.search() with query='{q.strip()}', limit={limit}")
         results = team_search.search(q.strip(), limit=limit)
+        logger.info(f"team_search.search() returned {len(results)} results")
         
         return StandardResponse(
             data={"matches": results},
@@ -426,6 +652,46 @@ async def search_teams(
     except Exception as e:
         logger.error(f"Error searching teams: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to search teams: {str(e)}")
+
+
+# ==================== TEAM SEARCH DEBUG ENDPOINT ====================
+@app.get("/api/v1/search/teams/debug")
+async def search_teams_debug():
+    """Debug endpoint to check team_search status"""
+    global team_search
+    import platform
+    csv_path = r"C:\fpl-api\fpl_teams_full.csv" if platform.system() == 'Windows' else "/opt/fpl-api/fpl_teams_full.csv"
+    
+    debug_info = {
+        "team_search_is_none": team_search is None,
+        "TEAM_SEARCH_AVAILABLE": TEAM_SEARCH_AVAILABLE,
+        "csv_path": csv_path,
+        "csv_exists": os.path.exists(csv_path),
+    }
+    
+    if team_search:
+        try:
+            debug_info.update({
+                "team_search_initialized": True,
+                "csv_path_obj": str(team_search.csv_path),
+                "db_path_obj": str(team_search.db_path),
+                "db_exists": team_search.db_path.exists() if hasattr(team_search, 'db_path') else None,
+                "_db_initialized": team_search._db_initialized if hasattr(team_search, '_db_initialized') else None,
+                "_data_loaded": team_search._data_loaded if hasattr(team_search, '_data_loaded') else None,
+                "teams_data_length": len(team_search.teams_data) if hasattr(team_search, 'teams_data') and team_search.teams_data else 0,
+            })
+            
+            # Try to import rapidfuzz
+            try:
+                from rapidfuzz import fuzz
+                debug_info["rapidfuzz_available"] = True
+            except ImportError as e:
+                debug_info["rapidfuzz_available"] = False
+                debug_info["rapidfuzz_error"] = str(e)
+        except Exception as e:
+            debug_info["team_search_error"] = str(e)
+    
+    return StandardResponse(data=debug_info)
 
 
 # ==================== MINI-LEAGUE ENDPOINTS ====================
@@ -522,20 +788,7 @@ async def health_check():
     }
 
 
-@app.get("/")
-async def root():
-    """API information endpoint"""
-    return {
-        "name": "FPL Visualization Dashboard API",
-        "version": "1.0.0",
-        "description": "REST API for FPL analytics and visualization data",
-        "endpoints": {
-            "health": "/api/v1/health",
-            "entry_info": "/api/v1/entry/{entry_id}/info",
-            "live_gameweek": "/api/v1/live/gameweek/{gameweek}",
-            "recommendations": "/api/v1/recommendations/transfers"
-        }
-    }
+# Root route moved to end of file to serve frontend
 
 
 # ==================== LIVE GAMEWEEK TRACKING ENDPOINTS ====================
@@ -1021,15 +1274,43 @@ async def get_transfer_recommendations(
         current_squad_ids = set(current_squad_df['id'])
         available_players = players_df[~players_df['id'].isin(current_squad_ids)].copy()
         
-        # Calculate free transfers
+        # Calculate free transfers using the same logic as main.py
+        # Counts consecutive gameweeks with no transfers working backwards from last event
         free_transfers = 1  # Default
         try:
-            current_event = next((e for e in entry_history.get('current', []) if e.get('event') == gameweek - 1), None)
-            if current_event:
-                free_transfers = current_event.get('event_transfers', 0) + 1
-                free_transfers = min(free_transfers, 2)  # Cap at 2
-        except:
-            pass
+            current_event = entry_history.get('current', [])[-1] if entry_history.get('current') else None
+            last_event = current_event.get('event', gameweek - 1) if current_event else (gameweek - 1)
+            
+            # Get transfer data
+            transfers_data = await loop.run_in_executor(None, api_client.get_entry_transfers, entry_id, True)
+            
+            # Group transfers by gameweek
+            transfers_by_gw = {}
+            for t in transfers_data:
+                gw = t.get('event', 0)
+                transfers_by_gw[gw] = transfers_by_gw.get(gw, 0) + 1
+            
+            # Calculate free transfers by checking consecutive gameweeks with no transfers
+            # Start from last_event (the last completed gameweek) and work backwards
+            consecutive_no_transfers = 0
+            
+            # Check gameweeks from last_event - 1 down to 1 (or reasonable limit)
+            # Start from last_event - 1 to exclude the current gameweek we're planning for
+            # When planning transfers for gameweek N, we only count completed gameweeks (up to N-1)
+            start_gw = max(1, last_event - 1)  # Don't count current gameweek
+            
+            for gw in range(start_gw, max(1, start_gw - 10), -1):
+                has_transfers = gw in transfers_by_gw and transfers_by_gw[gw] > 0
+                if not has_transfers:
+                    consecutive_no_transfers += 1
+                    # Update free transfers as we count consecutive weeks with no transfers
+                    free_transfers = min(consecutive_no_transfers + 1, 5)  # Cap at 5
+                else:
+                    # Transfers were made this gameweek, stop counting (don't reset to 1, keep what we have)
+                    break
+        except Exception as e:
+            logger.debug(f"Error calculating free transfers: {e}, defaulting to 1")
+            free_transfers = 1
         
         recommendations = optimizer.generate_smart_recommendations(
             current_squad_df, available_players, bank, free_transfers, max_transfers=max_transfers
@@ -1737,21 +2018,98 @@ async def get_ml_report(
     # The code below has been commented out to fix syntax errors
     # V2 always returns above, so this code never executes
     return JSONResponse(content={"error": "V2 forced but fell through - should never happen"}, status_code=500)
+
+# ==================== FRONTEND STATIC FILES ====================
+# Serve frontend static files (MUST be after all API routes)
+# Frontend directory - use absolute path for Windows server
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_ASSETS_DIR = FRONTEND_DIR / "assets"
+
+# Custom middleware to add cache headers for static assets
+class StaticCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        
+        # Add cache headers for static assets based on file type
+        path = request.url.path
+        if path.startswith("/assets/"):
+            # Hashed assets (JS/CSS with content hash in filename) - long cache
+            if any(ext in path for ext in ['.js', '.css']) and any(char in path for char in ['-', '.']):
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            # Images - medium cache
+            elif any(path.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.svg', '.webp', '.gif', '.ico']):
+                response.headers["Cache-Control"] = "public, max-age=86400"
+            # Other assets - short cache
+            else:
+                response.headers["Cache-Control"] = "public, max-age=3600"
+        # Logo images at root level
+        elif any(path.endswith(f'/logo{i}.png') for i in [1, 2, 3]):
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        
+        return response
+
+# Add static cache middleware (must be before mounting static files)
+app.add_middleware(StaticCacheMiddleware)
+
+# Mount static assets (JS, CSS, images, etc.) - must be before catch-all route
+if FRONTEND_ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_ASSETS_DIR)), name="static")
+    logger.info(f"Frontend assets mounted from: {FRONTEND_ASSETS_DIR}")
+else:
+    logger.warning(f"Frontend assets directory not found: {FRONTEND_ASSETS_DIR}")
+
+# Serve root endpoint with frontend
+@app.get("/")
+async def serve_root():
+    """Root endpoint - serve frontend if available, otherwise API information"""
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        logger.info(f"Serving frontend from: {index_path}")
+        return FileResponse(
+            str(index_path),
+            media_type="text/html",
+            headers={"Cache-Control": "public, max-age=0, must-revalidate"}
+        )
     
-# ==================== OPTIMIZE TEAM ENDPOINT ====================
-@app.get("/api/v1/optimize/team")
-async def optimize_team(
-    entry_id: int = Query(..., description="FPL entry ID"),
-    gameweek: Optional[int] = Query(None, description="Target gameweek"),
-    max_transfers: int = Query(4, description="Maximum transfers")
-):
-    """Optimize user's team with ML-powered recommendations"""
-    # This endpoint calls the recommendations endpoint
-    # Reuse the same logic
-    return await get_transfer_recommendations(
-        entry_id=entry_id,
-        gameweek=gameweek,
-        max_transfers=max_transfers,
-        forced_out_ids=None,
-        model_version="v4.6"
-    )
+    # Fallback to API info if frontend not deployed
+    logger.warning(f"Frontend not found at: {index_path}")
+    return {
+        "name": "FPL Visualization Dashboard API",
+        "version": "1.0.0",
+        "description": "REST API for FPL analytics and visualization data",
+        "endpoints": {
+            "health": "/api/v1/health",
+            "entry_info": "/api/v1/entry/{entry_id}/info",
+            "live_gameweek": "/api/v1/live/gameweek/{gameweek}",
+            "recommendations": "/api/v1/recommendations/transfers"
+        },
+        "frontend": f"Not deployed. Expected at: {index_path}"
+    }
+
+# Catch-all route for SPA routing (MUST be last, after all API routes)
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve frontend for all non-API routes (SPA routing)"""
+    # Don't serve frontend for API routes
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
+    # Don't serve for assets (already handled by mount)
+    if full_path.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    
+    # Try to serve the file if it exists
+    file_path = FRONTEND_DIR / full_path
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    
+    # Otherwise serve index.html for SPA routing
+    index_path = FRONTEND_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(
+            str(index_path),
+            media_type="text/html",
+            headers={"Cache-Control": "public, max-age=0, must-revalidate"}
+        )
+    
+    raise HTTPException(status_code=404, detail="Frontend not found")

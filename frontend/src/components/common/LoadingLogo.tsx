@@ -102,6 +102,9 @@ const LoadingLogo: React.FC<LoadingLogoProps> = ({
         <img
           src="/logo2.png"
           alt="FPL OPTIMIZER"
+          width="1024"
+          height="1024"
+          loading="eager"
           className="w-96 h-96 object-contain"
         />
       </div>

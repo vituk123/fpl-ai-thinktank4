@@ -21,6 +21,7 @@ const Landing: React.FC = () => {
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
 
   // Debounced search effect
   useEffect(() => {
@@ -35,27 +36,58 @@ const Landing: React.FC = () => {
       clearTimeout(searchTimeoutRef.current);
     }
 
+    // Cancel previous search request if still pending
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this search
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
     setSearchLoading(true);
     setShowResults(false);
 
+    // Store the current query to verify we're updating with the right results
+    const currentQuery = searchQuery.trim();
+
     // Debounce search by 300ms
     searchTimeoutRef.current = setTimeout(async () => {
+      // Check if this search was aborted
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       try {
-        const results = await teamSearchApi.searchTeams(searchQuery.trim());
-        setSearchResults(results);
-        setShowResults(true);
-      } catch (err) {
-        // Silently handle errors - searchTeams returns empty array on error
-        setSearchResults([]);
-        setShowResults(false);
+        const results = await teamSearchApi.searchTeams(currentQuery, abortController.signal);
+        
+        // Only update if this search wasn't aborted and query hasn't changed
+        if (!abortController.signal.aborted && searchQuery.trim() === currentQuery) {
+          setSearchResults(results);
+          setShowResults(true);
+        }
+      } catch (err: any) {
+        // Only update if this search wasn't aborted (ignore abort errors)
+        if (!abortController.signal.aborted && err.name !== 'AbortError') {
+          // Silently handle errors - searchTeams returns empty array on error
+          setSearchResults([]);
+          setShowResults(false);
+        }
       } finally {
-        setSearchLoading(false);
+        // Only update loading state if this search wasn't aborted
+        if (!abortController.signal.aborted && searchQuery.trim() === currentQuery) {
+          setSearchLoading(false);
+        }
       }
     }, 300);
 
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
+      }
+      // Abort search if component unmounts or query changes
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
       }
     };
   }, [searchQuery, inputMode]);
@@ -139,7 +171,7 @@ const Landing: React.FC = () => {
       <DesktopWindow title="System Access" className="w-full max-w-md md:max-w-md max-w-[90%] z-20 relative scale-90 md:scale-100">
         <div className="p-4 md:p-6 flex flex-col items-center">
             <div className="mb-4 md:mb-6 border-retro border-retro-primary p-3 md:p-4 bg-retro-background w-full text-center">
-                <img src="/logo3.png" alt="FPL OPTIMIZER" className="mx-auto mb-2 md:mb-3 h-64 md:h-96 object-contain" />
+                <img src="/logo3.png" alt="FPL OPTIMIZER" width="1024" height="1024" loading="eager" className="mx-auto mb-2 md:mb-3 h-64 md:h-96 object-contain" />
             </div>
           
           <p className="mb-4 md:mb-6 text-center text-xs md:text-sm px-2">
@@ -235,7 +267,7 @@ const Landing: React.FC = () => {
                       >
                         <div className="font-semibold text-sm">{result.team_name}</div>
                         <div className="text-xs opacity-75">{result.manager_name}</div>
-                        <div className="text-[10px] opacity-50 mt-1">Match: {Math.round(result.similarity * 100)}%</div>
+                        <div className="text-[10px] opacity-50 mt-1">Match: {typeof result.similarity === 'number' ? (result.similarity > 1 ? Math.round(result.similarity) : Math.round(result.similarity * 100)) : 0}%</div>
                       </button>
                     ))}
                   </div>

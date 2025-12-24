@@ -61,27 +61,25 @@ const Recommendations: React.FC = () => {
       
       fetchingRef.current = true; // Mark as fetching
       
-      // Debug logging disabled in production
       // #region agent log
-      // logData('Recommendations.tsx:useEffect:entry', 'useEffect triggered', {
-      //   entryId,
-      //   currentGameweek,
-      //   localStorage_entryId: localStorage.getItem('fpl_entry_id'),
-      //   localStorage_entryInfo: localStorage.getItem('fpl_entry_info'),
-      //   existing_report_gameweek: report?.header?.gameweek,
-      //   isFetching: fetchingRef.current
-      // }, 'A');
+// logData('Recommendations.tsx:useEffect:entry', 'useEffect triggered', {
+        entryId,
+        currentGameweek,
+        localStorage_entryId: localStorage.getItem('fpl_entry_id'),
+        localStorage_entryInfo: localStorage.getItem('fpl_entry_info'),
+        existing_report_gameweek: report?.header?.gameweek,
+        isFetching: fetchingRef.current
+      }, 'A');
       // #endregion
       
       try {
-        // Debug logging disabled in production
         // #region agent log
-        // logData('Recommendations.tsx:fetchReport:before_api', 'Before API call', {
-        //   entryId,
-        //   currentGameweek,
-        //   gameweek_param: undefined,
-        //   fastMode: false
-        // }, 'B');
+// logData('Recommendations.tsx:fetchReport:before_api', 'Before API call', {
+          entryId,
+          currentGameweek,
+          gameweek_param: undefined,
+          fastMode: false
+        }, 'B');
         // #endregion
         
         console.log('ML Report: Fetching for entryId:', entryId, 'gameweek:', currentGameweek);
@@ -90,14 +88,13 @@ const Recommendations: React.FC = () => {
         // Use fast_mode=false to get full ML analysis on GCE VM (32GB RAM, 8 CPUs)
         const data = await mlApi.getMLReport(entryId, undefined, false);
         
-        // Debug logging disabled in production
         // #region agent log
-        // logData('Recommendations.tsx:fetchReport:after_api', 'After API call', {
-        //   received_gameweek: data?.header?.gameweek,
-        //   received_header: data?.header,
-        //   has_transfer_recommendations: !!data?.transfer_recommendations,
-        //   data_keys: data ? Object.keys(data) : []
-        // }, 'C');
+// logData('Recommendations.tsx:fetchReport:after_api', 'After API call', {
+          received_gameweek: data?.header?.gameweek,
+          received_header: data?.header,
+          has_transfer_recommendations: !!data?.transfer_recommendations,
+          data_keys: data ? Object.keys(data) : []
+        }, 'C');
         // #endregion
         
         console.log('ML Report: Received data:', data);
@@ -127,24 +124,22 @@ const Recommendations: React.FC = () => {
           }
         }
         
-        // Debug logging disabled in production
         // #region agent log
-        // logData('Recommendations.tsx:fetchReport:before_setReport', 'Before setReport', {
-        //   old_report_gameweek: report?.header?.gameweek,
-        //   new_report_gameweek: data?.header?.gameweek,
-        //   will_update: report?.header?.gameweek !== data?.header?.gameweek
-        // }, 'D');
+// logData('Recommendations.tsx:fetchReport:before_setReport', 'Before setReport', {
+          old_report_gameweek: report?.header?.gameweek,
+          new_report_gameweek: data?.header?.gameweek,
+          will_update: report?.header?.gameweek !== data?.header?.gameweek
+        }, 'D');
         // #endregion
         
         setReport(data);
         setError(null);
         
-        // Debug logging disabled in production
         // #region agent log
-        // logData('Recommendations.tsx:fetchReport:after_setReport', 'After setReport', {
-        //   set_gameweek: data?.header?.gameweek,
-        //   context_gameweek: currentGameweek
-        // }, 'E');
+// logData('Recommendations.tsx:fetchReport:after_setReport', 'After setReport', {
+          set_gameweek: data?.header?.gameweek,
+          context_gameweek: currentGameweek
+        }, 'E');
         // #endregion
         
         // CRITICAL: Verify we got valid data with a gameweek
@@ -161,13 +156,12 @@ const Recommendations: React.FC = () => {
           // Note: We can't directly update context here, but the report will display the correct gameweek
         }
       } catch (e: any) {
-        // Debug logging disabled in production
         // #region agent log
-        // logData('Recommendations.tsx:fetchReport:error', 'API call error', {
-        //   error_message: e.message,
-        //   error_response: e.response?.data,
-        //   is_timeout: e.message?.includes('timeout') || e.response?.data?.timeout
-        // }, 'F');
+// logData('Recommendations.tsx:fetchReport:error', 'API call error', {
+          error_message: e.message,
+          error_response: e.response?.data,
+          is_timeout: e.message?.includes('timeout') || e.response?.data?.timeout
+        }, 'F');
         // #endregion
         
         console.error('ML Report: Error fetching:', e);

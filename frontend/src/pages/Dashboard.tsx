@@ -28,8 +28,9 @@ const Dashboard: React.FC = () => {
 
         if (historyResult.status === 'fulfilled') {
           console.log('Dashboard: Team history response:', historyResult.value);
+          // Debug logging disabled in production
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:30',message:'Team history response received',data:{hasData:!!historyResult.value,dataKeys:historyResult.value?Object.keys(historyResult.value):[],dataStructure:JSON.stringify(historyResult.value).substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:30',message:'Team history response received',data:{hasData:!!historyResult.value,dataKeys:historyResult.value?Object.keys(historyResult.value):[],dataStructure:JSON.stringify(historyResult.value).substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
           // #endregion
           setHistory(historyResult.value);
         } else {
@@ -38,11 +39,12 @@ const Dashboard: React.FC = () => {
 
         if (captainResult.status === 'fulfilled') {
           console.log('Dashboard: Captain performance response:', captainResult.value);
+          // Debug logging disabled in production
           // #region agent log
-          const captainData = captainResult.value?.data || captainResult.value;
-          const captains = captainData?.captains || [];
-          const sampleCaptain = captains[0] || null;
-          fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:37',message:'Captain performance response received',data:{captainsCount:captains.length,sampleCaptain:sampleCaptain,allPointsZero:captains.every((c:any)=>!c.points),allDoubledZero:captains.every((c:any)=>!c.doubled_points)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // const captainData = captainResult.value?.data || captainResult.value;
+          // const captains = captainData?.captains || [];
+          // const sampleCaptain = captains[0] || null;
+          // fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:37',message:'Captain performance response received',data:{captainsCount:captains.length,sampleCaptain:sampleCaptain,allPointsZero:captains.every((c:any)=>!c.points),allDoubledZero:captains.every((c:any)=>!c.doubled_points)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
           // #endregion
           setCaptainData(captainResult.value);
         } else {
@@ -58,11 +60,12 @@ const Dashboard: React.FC = () => {
             transfersType: typeof transferResult.value?.data?.transfers,
             isArray: Array.isArray(transferResult.value?.data?.transfers)
           });
+          // Debug logging disabled in production
           // #region agent log
-          const transferData = transferResult.value?.data || transferResult.value;
-          const transfers = transferData?.transfers || [];
-          const sampleTransfer = transfers[0] || null;
-          fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:44',message:'Transfer analysis response received',data:{transfersCount:transfers.length,sampleTransfer:sampleTransfer,allPredictedZero:transfers.every((t:any)=>!t.predicted_gain),allActualZero:transfers.every((t:any)=>!t.actual_gain)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // const transferData = transferResult.value?.data || transferResult.value;
+          // const transfers = transferData?.transfers || [];
+          // const sampleTransfer = transfers[0] || null;
+          // fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:44',message:'Transfer analysis response received',data:{transfersCount:transfers.length,sampleTransfer:sampleTransfer,allPredictedZero:transfers.every((t:any)=>!t.predicted_gain),allActualZero:transfers.every((t:any)=>!t.actual_gain)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
           // #endregion
           setTransferData(transferResult.value);
         } else {
@@ -71,11 +74,12 @@ const Dashboard: React.FC = () => {
 
         if (ownershipResult.status === 'fulfilled') {
           console.log('Dashboard: Ownership correlation response:', ownershipResult.value);
+          // Debug logging disabled in production
           // #region agent log
-          const ownershipData = ownershipResult.value?.data || ownershipResult.value;
-          const players = ownershipData?.players || [];
-          const samplePlayer = players[0] || null;
-          fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:51',message:'Ownership correlation response received',data:{playersCount:players.length,samplePlayer:samplePlayer,allPointsZero:players.every((p:any)=>!p.total_points),correlationCoeff:ownershipData?.correlation_coefficient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // const ownershipData = ownershipResult.value?.data || ownershipResult.value;
+          // const players = ownershipData?.players || [];
+          // const samplePlayer = players[0] || null;
+          // fetch('http://127.0.0.1:7242/ingest/cbe61e98-98ca-4046-830f-3dbf90ee4a82',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Dashboard.tsx:51',message:'Ownership correlation response received',data:{playersCount:players.length,samplePlayer:samplePlayer,allPointsZero:players.every((p:any)=>!p.total_points),correlationCoeff:ownershipData?.correlation_coefficient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
           // #endregion
           setOwnershipData(ownershipResult.value);
         } else {

@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #DADAD3;
+  color: #1D1D1B;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar for retro feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #DADAD3;
+  border-left: 2.5px solid #1D1D1B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1D1D1B;
+  border: 2px solid #DADAD3;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.retro-pattern {
+  background-image: repeating-linear-gradient(45deg, #1D1D1B 0, #1D1D1B 1px, transparent 0, transparent 50%);
+  background-size: 10px 10px;
+  opacity: 0.1;
+}

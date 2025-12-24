@@ -43,17 +43,37 @@ export default async function handler(
 
     console.log(`[Proxy] ${req.method} ${url.toString()}`);
 
-    // Forward the request to ByteHosty
-    const response = await fetch(url.toString(), {
-      method: req.method,
-      headers: {
-        'Content-Type': req.headers['content-type'] || 'application/json',
-        ...(req.headers.authorization && { Authorization: req.headers.authorization }),
-      },
-      body: req.method !== 'GET' && req.method !== 'HEAD' 
-        ? JSON.stringify(req.body) 
-        : undefined,
-    });
+    // Forward the request to ByteHosty with increased timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+    
+    try {
+      const response = await fetch(url.toString(), {
+        method: req.method,
+        headers: {
+          'Content-Type': req.headers['content-type'] || 'application/json',
+          ...(req.headers.authorization && { Authorization: req.headers.authorization }),
+        },
+        body: req.method !== 'GET' && req.method !== 'HEAD' 
+          ? JSON.stringify(req.body) 
+          : undefined,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.error('[Proxy] Request timeout:', url.toString());
+        return res.status(504).json({
+          error: 'Gateway Timeout',
+          message: 'Request to ByteHosty backend timed out after 60 seconds',
+          url: url.toString()
+        });
+      }
+      throw fetchError;
+    }
 
     // Get response data
     const contentType = response.headers.get('content-type') || '';

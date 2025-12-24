@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useAppContext } from './src/context/AppContext';
 import MacMenuBar from './src/components/retroui/MacMenuBar';
 import Dock from './src/components/retroui/Dock';
-import Landing from './src/pages/Landing';
-import Dashboard from './src/pages/Dashboard';
-import LiveTracking from './src/pages/LiveTracking';
-import Recommendations from './src/pages/Recommendations';
-import News from './src/pages/News';
+import LoadingLogo from './src/components/common/LoadingLogo';
+
+// Lazy load route components for code splitting
+const Landing = React.lazy(() => import('./src/pages/Landing'));
+const Dashboard = React.lazy(() => import('./src/pages/Dashboard'));
+const LiveTracking = React.lazy(() => import('./src/pages/LiveTracking'));
+const Recommendations = React.lazy(() => import('./src/pages/Recommendations'));
+const News = React.lazy(() => import('./src/pages/News'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { isAuthenticated } = useAppContext();
@@ -25,15 +28,17 @@ const AppRoutes = () => {
           <MacMenuBar />
           
           <div className="relative z-10">
-            <Routes>
-                <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/live" element={<ProtectedRoute><LiveTracking /></ProtectedRoute>} />
-                <Route path="/recommendations" element={<ProtectedRoute><Recommendations /></ProtectedRoute>} />
-                {/* News page disabled */}
-                {/* <Route path="/news" element={<ProtectedRoute><News /></ProtectedRoute>} /> */}
-                <Route path="*" element={<Navigate to="/" />} />
-            </Routes>
+            <Suspense fallback={<LoadingLogo text="Loading..." />}>
+              <Routes>
+                  <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
+                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                  <Route path="/live" element={<ProtectedRoute><LiveTracking /></ProtectedRoute>} />
+                  <Route path="/recommendations" element={<ProtectedRoute><Recommendations /></ProtectedRoute>} />
+                  {/* News page disabled */}
+                  {/* <Route path="/news" element={<ProtectedRoute><News /></ProtectedRoute>} /> */}
+                  <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </Suspense>
           </div>
 
           {isAuthenticated && <div className="hidden md:block"><Dock /></div>}
